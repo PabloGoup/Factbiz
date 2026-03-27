@@ -69,6 +69,7 @@ export function ResultsDashboard() {
         insights: EvaluationSnapshot["insights"];
         context?: EvaluationSnapshot["context"];
         scoreBreakdown?: EvaluationSnapshot["scoreBreakdown"];
+        warning?: string | null;
         mode: "mock" | "gemini";
       };
       const nextSnapshot = {
@@ -83,7 +84,9 @@ export function ResultsDashboard() {
       setInsightStatus("ready");
       setInsightMessage(
         payload.mode === "gemini"
-          ? `Insights generados con ${payload.insights.model ?? "modelo configurado"}.`
+          ? payload.warning
+            ? `Insights generados con ${payload.insights.model ?? "modelo configurado"}. Contexto territorial reforzado con fallback heurístico: ${payload.warning}`
+            : `Insights generados con ${payload.insights.model ?? "modelo configurado"}.`
           : payload.insights.fallbackReason ?? "Se mantuvo la simulación local."
       );
     } catch (error) {

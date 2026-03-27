@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
+import { parseGeminiJson } from "@/lib/ai/gemini";
 import { EMPTY_PROJECT } from "@/lib/constants";
 import type { ChatMessage, InterviewTurnResult, ProjectDraft } from "@/types";
 import { draftCompletionSummary } from "@/lib/project-draft";
@@ -777,7 +778,7 @@ export async function runInterviewTurn(messages: ChatMessage[], draft: ProjectDr
     config: {
       responseMimeType: "application/json",
       responseSchema,
-      temperature: 0.6,
+      temperature: 0.3,
       maxOutputTokens: 1600
     }
   });
@@ -787,7 +788,7 @@ export async function runInterviewTurn(messages: ChatMessage[], draft: ProjectDr
     throw new Error("Gemini no devolvió contenido para la entrevista.");
   }
 
-  const parsed = interviewTurnSchema.parse(JSON.parse(rawOutput));
+  const parsed = interviewTurnSchema.parse(parseGeminiJson(rawOutput));
   const geminiPatch = compactPatch(parsed.projectPatch as Record<string, unknown>);
   const mergedPatch = {
     ...geminiPatch,

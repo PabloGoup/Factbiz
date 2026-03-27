@@ -95,6 +95,9 @@ function buildBlockRecommendation(block: BlockScore) {
 function buildBlockNarrative(block: BlockScore): ReportBlockNarrative {
   return {
     summary: `${block.summary} El bloque cierra con ${block.score.toFixed(1)}/10 y un peso de ${block.weight}%, por lo que su incidencia en la recomendación final es material.`,
+    detailedAnalysis: `${block.summary} En términos aplicados, este bloque condiciona la factibilidad porque reúne señales sobre ${block.factors
+      .map((factor) => factor.label.toLowerCase())
+      .join(", ")}. El desempeño de ${block.label} obliga a leer no solo la idea del negocio, sino también la capacidad de ejecutarla de forma consistente en mercado, operación y contexto competitivo.`,
     positives:
       block.positives.length > 0
         ? block.positives.slice(0, 3)
@@ -103,7 +106,18 @@ function buildBlockNarrative(block: BlockScore): ReportBlockNarrative {
       block.risks.length > 0
         ? block.risks.slice(0, 3)
         : ["No aparece un riesgo crítico aislado, pero sí conviene monitorear la consistencia de este bloque durante la validación."],
-    recommendation: buildBlockRecommendation(block)
+    recommendation: buildBlockRecommendation(block),
+    factorNarratives: block.factors.slice(0, 5).map((factor) => ({
+      label: factor.label,
+      headline: `${factor.label} registra ${factor.score.toFixed(1)}/10.`,
+      assessment: factor.note,
+      impact:
+        factor.score >= 7
+          ? "Su efecto sobre el proyecto es favorable y puede transformarse en una ventaja defendible."
+          : factor.score >= 5
+            ? "Su efecto es intermedio: no invalida el caso, pero sí exige ajustes de diseño o ejecución."
+            : "Su efecto es restrictivo y hoy presiona negativamente la factibilidad del proyecto."
+    }))
   };
 }
 

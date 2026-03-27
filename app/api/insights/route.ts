@@ -101,17 +101,23 @@ export async function POST(request: Request) {
     try {
       let context = payload.context;
       let scoreBreakdown = payload.scoreBreakdown;
+      let groundedContextWarning: string | null = null;
 
       if (payload.useGroundedContext) {
-        context = await getGroundedLocationContext({
-          country: payload.input.country,
-          region: payload.input.region,
-          city: payload.input.city,
-          businessType: payload.input.businessType,
-          sector: payload.input.sector,
-          targetAudience: payload.input.targetAudience
-        });
-        scoreBreakdown = evaluateProject(payload.input, context, payload.scoreBreakdown.weights);
+        try {
+          context = await getGroundedLocationContext({
+            country: payload.input.country,
+            region: payload.input.region,
+            city: payload.input.city,
+            businessType: payload.input.businessType,
+            sector: payload.input.sector,
+            targetAudience: payload.input.targetAudience
+          });
+          scoreBreakdown = evaluateProject(payload.input, context, payload.scoreBreakdown.weights);
+        } catch (groundedError) {
+          groundedContextWarning = describeGeminiError(groundedError);
+          console.error("[insights] grounded context fallback", groundedError);
+        }
       }
 
       const insights = await generateGeminiInsights(payload.input, context, scoreBreakdown);
@@ -120,9 +126,11 @@ export async function POST(request: Request) {
         insights,
         context,
         scoreBreakdown,
-        mode: "gemini"
+        mode: "gemini",
+        warning: groundedContextWarning
       });
     } catch (providerError) {
+      console.error("[insights] gemini generation failed", providerError);
       if (payload.strict) {
         return NextResponse.json(
           {

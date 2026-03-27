@@ -72,9 +72,16 @@ export type LocationContext = {
 
 export type ReportBlockNarrative = {
   summary: string;
+  detailedAnalysis: string;
   positives: string[];
   risks: string[];
   recommendation: string;
+  factorNarratives: {
+    label: string;
+    headline: string;
+    assessment: string;
+    impact: string;
+  }[];
 };
 
 export type ReportNarrative = {

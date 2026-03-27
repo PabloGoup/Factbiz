@@ -286,6 +286,14 @@ export function ReportPage() {
                 {activeBlock.score.toFixed(1)} / 10
               </div>
             </div>
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                Análisis desarrollado
+              </p>
+              <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                {snapshot.insights.reportNarrative.blockNarratives[activeBlock.id].detailedAnalysis}
+              </p>
+            </div>
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Lecturas favorables</p>
@@ -308,6 +316,30 @@ export function ReportPage() {
                 <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
                   {snapshot.insights.reportNarrative.blockNarratives[activeBlock.id].recommendation}
                 </p>
+              </div>
+            </div>
+            <div className="mt-5">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Subdimensiones analizadas
+              </p>
+              <div className="mt-4 grid gap-4">
+                {snapshot.insights.reportNarrative.blockNarratives[activeBlock.id].factorNarratives.map((factor) => (
+                  <div
+                    key={`${activeBlock.id}-${factor.label}`}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-base font-semibold text-slate-950 dark:text-slate-50">{factor.label}</h3>
+                      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                        {factor.headline}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">{factor.assessment}</p>
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                      <span className="font-semibold">Impacto en el proyecto:</span> {factor.impact}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="mt-5 overflow-x-auto">

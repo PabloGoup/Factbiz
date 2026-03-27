@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
+import { parseGeminiJson } from "@/lib/ai/gemini";
 import type { LocationContext, ProjectInput } from "@/types";
 
 const groundedContextSchema = z.object({
@@ -23,39 +24,22 @@ function normalize(text: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function extractInteractionText(interaction: unknown) {
-  const outputs = (interaction as { outputs?: unknown[] })?.outputs ?? [];
+function extractResponseText(response: unknown) {
+  if (response && typeof response === "object" && "text" in response && typeof response.text === "string") {
+    const directText = response.text.trim();
+    if (directText) return directText;
+  }
 
-  const texts = outputs.flatMap((output) => {
-    if (!output || typeof output !== "object") return [];
+  const candidates = (response as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })?.candidates ?? [];
 
-    if ("text" in output && typeof output.text === "string") {
-      return [output.text];
-    }
+  const candidateText = candidates
+    .flatMap((candidate) => candidate.content?.parts ?? [])
+    .map((part) => (typeof part.text === "string" ? part.text.trim() : ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 
-    if ("parts" in output && Array.isArray(output.parts)) {
-      return output.parts
-        .flatMap((part) => {
-          if (!part || typeof part !== "object") return [];
-          return "text" in part && typeof part.text === "string" ? [part.text] : [];
-        })
-        .filter(Boolean);
-    }
-
-    if ("content" in output && output.content && typeof output.content === "object" && "parts" in output.content) {
-      const parts = Array.isArray(output.content.parts) ? output.content.parts : [];
-      return parts
-        .flatMap((part) => {
-          if (!part || typeof part !== "object") return [];
-          return "text" in part && typeof part.text === "string" ? [part.text] : [];
-        })
-        .filter(Boolean);
-    }
-
-    return [];
-  });
-
-  return texts.join("\n").trim();
+  return candidateText;
 }
 
 export async function getGroundedLocationContext(input: Pick<ProjectInput, "country" | "region" | "city" | "businessType" | "sector" | "targetAudience">): Promise<LocationContext> {
@@ -70,13 +54,17 @@ export async function getGroundedLocationContext(input: Pick<ProjectInput, "coun
   const scoringModel = process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite";
   const locationLabel = `${input.city}, ${input.region}, ${input.country}`;
 
-  const groundedInteraction = await client.interactions.create({
+  const groundedResponse = await client.models.generateContent({
     model: researchModel,
-    input: `Investiga con Google Search el entorno actual de ${locationLabel} para un proyecto de ${input.businessType} del rubro ${input.sector}, orientado a ${input.targetAudience}. Necesito un brief factual en español, corto pero sustantivo, sobre turismo, flujo comercial, presión competitiva, estabilidad económica, sensibilidad al precio, facilidad regulatoria, digitalización y atractivo del mercado. No inventes datos ni uses frases vacías.`,
-    tools: [{ type: "google_search" }]
+    contents: `Investiga el entorno actual de ${locationLabel} para un proyecto de ${input.businessType} del rubro ${input.sector}, orientado a ${input.targetAudience}. Usa Google Search y entrega un brief factual en español, breve pero sustantivo, sobre turismo, flujo comercial, presión competitiva, estabilidad económica, sensibilidad al precio, facilidad regulatoria, digitalización y atractivo del mercado. No inventes cifras exactas si no están respaldadas.`,
+    config: {
+      tools: [{ googleSearch: {} }],
+      temperature: 0.2,
+      maxOutputTokens: 700
+    }
   });
 
-  const groundedBrief = extractInteractionText(groundedInteraction);
+  const groundedBrief = extractResponseText(groundedResponse);
 
   if (!groundedBrief) {
     throw new Error("Gemini no devolvió un brief grounded para la ubicación.");
@@ -84,7 +72,7 @@ export async function getGroundedLocationContext(input: Pick<ProjectInput, "coun
 
   const response = await client.models.generateContent({
     model: scoringModel,
-    contents: `Convierte este brief grounded en un JSON para scoring de factibilidad.\n\nUbicación: ${locationLabel}\n\nBrief:\n${groundedBrief}\n\nDevuelve exclusivamente JSON con estos campos numéricos del 1 al 10: tourismLevel, commercialFlow, competitivePressure, economicStability, priceSensitivity, regulatoryEase, digitalizationLevel, marketAttractiveness, y un narrative ejecutivo de 2 a 4 frases.`,
+    contents: `Convierte este brief grounded en un JSON útil para scoring de factibilidad.\n\nUbicación: ${locationLabel}\n\nBrief:\n${groundedBrief}\n\nDevuelve exclusivamente JSON con estos campos: tourismLevel, commercialFlow, competitivePressure, economicStability, priceSensitivity, regulatoryEase, digitalizationLevel, marketAttractiveness, narrative. Todos los puntajes deben ir del 1 al 10. El narrative debe resumir en 2 a 4 frases qué señales del entorno afectan realmente al proyecto.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -113,17 +101,17 @@ export async function getGroundedLocationContext(input: Pick<ProjectInput, "coun
         ]
       },
       temperature: 0.2,
-      maxOutputTokens: 500
+      maxOutputTokens: 700
     }
   });
 
-  const rawOutput = typeof response.text === "string" ? response.text.trim() : "";
+  const rawOutput = extractResponseText(response);
 
   if (!rawOutput) {
     throw new Error("Gemini no devolvió contexto estructurado para la ubicación.");
   }
 
-  const parsed = groundedContextSchema.parse(JSON.parse(rawOutput));
+  const parsed = groundedContextSchema.parse(parseGeminiJson(rawOutput));
   const key = [normalize(input.country), normalize(input.region), normalize(input.city)].join("|");
 
   return {
