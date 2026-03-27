@@ -429,6 +429,22 @@ function buildCompactInsightPayload(input: ProjectInput, context: LocationContex
   );
 }
 
+function extractGeminiResponseText(response: unknown) {
+  if (response && typeof response === "object" && "text" in response && typeof response.text === "string") {
+    const directText = response.text.trim();
+    if (directText) return directText;
+  }
+
+  const candidates = (response as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> })?.candidates ?? [];
+
+  return candidates
+    .flatMap((candidate) => candidate.content?.parts ?? [])
+    .map((part) => (typeof part.text === "string" ? part.text.trim() : ""))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
 function normalizeInsightPayload(payload: z.infer<typeof geminiInsightSchema>) {
   return {
     ...payload,
@@ -579,7 +595,7 @@ async function repairGeminiInsightsPayload(
     }
   });
 
-  const repairedOutput = typeof repairResponse.text === "string" ? repairResponse.text.trim() : "";
+  const repairedOutput = extractGeminiResponseText(repairResponse);
 
   if (!repairedOutput) {
     throw new Error("Gemini no devolvió una reparación válida del JSON de insights.");
@@ -596,28 +612,61 @@ async function generateStructuredSection<T>(
   validator: z.ZodType<T>,
   maxOutputTokens: number
 ) {
-  const response = await client.models.generateContent({
-    model,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: sectionSchema,
-      temperature: 0.2,
-      maxOutputTokens
+  const runStructuredCall = async (contents: string, outputTokens: number, temperature = 0.2) => {
+    const response = await client.models.generateContent({
+      model,
+      contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: sectionSchema,
+        temperature,
+        maxOutputTokens: outputTokens
+      }
+    });
+
+    const rawOutput = extractGeminiResponseText(response);
+
+    if (!rawOutput) {
+      throw new Error("Gemini no devolvió contenido estructurado.");
     }
-  });
 
-  const rawOutput = typeof response.text === "string" ? response.text.trim() : "";
+    return rawOutput;
+  };
 
-  if (!rawOutput) {
-    throw new Error("Gemini no devolvió contenido estructurado.");
-  }
+  const rawOutput = await runStructuredCall(prompt, maxOutputTokens);
 
   try {
     return validator.parse(parseGeminiJson(rawOutput));
   } catch {
-    const repaired = await repairGeminiInsightsPayload(client, model, rawOutput, sectionSchema, maxOutputTokens);
-    return validator.parse(repaired);
+    try {
+      const repaired = await repairGeminiInsightsPayload(client, model, rawOutput, sectionSchema, maxOutputTokens);
+      return validator.parse(repaired);
+    } catch {
+      const compactPrompt = `${prompt}
+
+IMPORTANTE:
+- Devuelve una versión compacta y estricta.
+- No excedas el mínimo útil de texto por campo.
+- No agregues explicación fuera del JSON.
+- Si una lista puede ser breve, hazla breve.
+- Prioriza validez JSON sobre extensión.`;
+
+      const compactRawOutput = await runStructuredCall(compactPrompt, Math.min(maxOutputTokens, 900), 0.1);
+
+      try {
+        return validator.parse(parseGeminiJson(compactRawOutput));
+      } catch {
+        const repairedCompact = await repairGeminiInsightsPayload(
+          client,
+          model,
+          compactRawOutput,
+          sectionSchema,
+          Math.min(maxOutputTokens, 900)
+        );
+
+        return validator.parse(repairedCompact);
+      }
+    }
   }
 }
 
@@ -654,8 +703,11 @@ export async function generateGeminiInsights(
     1200
   );
 
-  const blockNarrativesEntries = await Promise.all(
-    scoreBreakdown.blocks.map(async (block) => {
+  const blockNarrativesEntries: Array<
+    readonly [ScoreBreakdown["blocks"][number]["id"], z.infer<typeof blockNarrativeSchema>]
+  > = [];
+
+  for (const block of scoreBreakdown.blocks) {
       const blockPayload = JSON.stringify(
         {
           proyecto: {
@@ -692,18 +744,17 @@ export async function generateGeminiInsights(
         2
       );
 
-      const blockNarrative = await generateStructuredSection(
-        client,
-        model,
-        `${systemPrompt.trim()}\n\nGenera solo el detalle del bloque ${block.label} en JSON.\n\nInstrucciones extra:\n- Redacta un análisis aplicado directamente al proyecto, no un comentario genérico.\n- Usa explícitamente la ubicación, el público objetivo, la propuesta comercial y las señales del contexto territorial cuando aporten valor.\n- Si el bloque es Porter, analiza cada fuerza como presión competitiva concreta para este negocio y explica su impacto en la factibilidad.\n- Si el bloque es SEPTE, Mercado, Finanzas u Operación, desarrolla cada subdimensión recibida en factors con una lectura clara y situada.\n- En factorNarratives debes devolver una entrada por cada subdimensión/fuerza relevante del bloque.\n- Cada assessment debe ser sustantivo, directo y conectado al proyecto.\n- Cada impact debe explicar cómo esa subdimensión afecta la viabilidad del negocio.\n\n${blockPayload}`,
-        blockNarrativeResponseSchema,
-        blockNarrativeSchema,
-        1400
-      );
+    const blockNarrative = await generateStructuredSection(
+      client,
+      model,
+      `${systemPrompt.trim()}\n\nGenera solo el detalle del bloque ${block.label} en JSON.\n\nInstrucciones extra:\n- Redacta un análisis aplicado directamente al proyecto, no un comentario genérico.\n- Usa explícitamente la ubicación, el público objetivo, la propuesta comercial y las señales del contexto territorial cuando aporten valor.\n- Si el bloque es Porter, analiza cada fuerza como presión competitiva concreta para este negocio y explica su impacto en la factibilidad.\n- Si el bloque es SEPTE, Mercado, Finanzas u Operación, desarrolla cada subdimensión recibida en factors con una lectura clara y situada.\n- En factorNarratives debes devolver una entrada por cada subdimensión/fuerza relevante del bloque.\n- Cada assessment debe ser sustantivo, directo y conectado al proyecto.\n- Cada impact debe explicar cómo esa subdimensión afecta la viabilidad del negocio.\n\n${blockPayload}`,
+      blockNarrativeResponseSchema,
+      blockNarrativeSchema,
+      1100
+    );
 
-      return [block.id, blockNarrative] as const;
-    })
-  );
+    blockNarrativesEntries.push([block.id, blockNarrative] as const);
+  }
 
   const parsed = geminiInsightSchema.parse(normalizeInsightPayload({
     ...core,

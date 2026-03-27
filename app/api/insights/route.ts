@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { generateMockAiInsights } from "@/lib/ai/aiInsights";
+import { generateMockAiInsights, generateResearchBackedInsights } from "@/lib/ai/aiInsights";
 import { describeGeminiError, generateGeminiInsights, isGeminiConfigured } from "@/lib/ai/gemini";
 import { getGroundedLocationContext } from "@/lib/context/locationContextResearch";
 import { evaluateProject } from "@/lib/scoring/engine";
-import type { LocationContext, ProjectInput, ScoreBreakdown } from "@/types";
+import type { LocationContext, ProjectInput, ResearchDossier, ScoreBreakdown } from "@/types";
 
 const blockIdSchema = z.enum(["septe", "porter", "foda", "mercado", "finanzas", "operacionLegalidad"]);
 
@@ -28,6 +28,7 @@ const requestSchema = z.object({
     city: z.string(),
     narrative: z.string()
   }).passthrough(),
+  research: z.any().optional(),
   strict: z.boolean().optional(),
   useGroundedContext: z.boolean().optional(),
   scoreBreakdown: z.object({
@@ -73,6 +74,7 @@ export async function POST(request: Request) {
       input: ProjectInput;
       context: LocationContext;
       scoreBreakdown: ScoreBreakdown;
+      research?: ResearchDossier;
       strict?: boolean;
       useGroundedContext?: boolean;
     };
@@ -131,6 +133,20 @@ export async function POST(request: Request) {
       });
     } catch (providerError) {
       console.error("[insights] gemini generation failed", providerError);
+      if (payload.research) {
+        const researchBackedInsights = generateResearchBackedInsights(
+          payload.input,
+          payload.context,
+          payload.scoreBreakdown,
+          payload.research
+        );
+
+        return NextResponse.json({
+          insights: researchBackedInsights,
+          mode: "research-fallback"
+        });
+      }
+
       if (payload.strict) {
         return NextResponse.json(
           {

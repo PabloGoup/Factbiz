@@ -92,6 +92,7 @@ async function upgradeSnapshotInsights(snapshot: EvaluationSnapshot) {
       input: snapshot.input,
       context: snapshot.context,
       scoreBreakdown: snapshot.scoreBreakdown,
+      research: snapshot.research,
       strict: true,
       useGroundedContext: true
     })
@@ -123,6 +124,7 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [researchLoading, setResearchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [weightPreset, setWeightPreset] = useState<keyof typeof weightPresets>("balanceado");
 
@@ -247,6 +249,65 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
     }
   };
 
+  const runAcademicResearch = async () => {
+    if (!session) return;
+
+    setResearchLoading(true);
+    setError(null);
+
+    try {
+      const query =
+        message.trim() ||
+        [
+          mergedInput.projectName || "Proyecto sin nombre",
+          mergedInput.businessType || mergedInput.sector || "negocio",
+          mergedInput.city ? `en ${mergedInput.city}` : "",
+          mergedInput.country ? `${mergedInput.city ? "," : "en"} ${mergedInput.country}` : ""
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+      const response = await fetch("/api/research", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          query,
+          draft: session.draft,
+          weights
+        })
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error ?? "No fue posible investigar el proyecto.");
+      }
+
+      const payload = (await response.json()) as { snapshot: EvaluationSnapshot };
+      const enrichedSnapshot = await upgradeSnapshotInsights(payload.snapshot);
+
+      setStoredProject(enrichedSnapshot.input);
+      setStoredWeights(weights);
+      setStoredEvaluation(enrichedSnapshot);
+      setSession({
+        ...session,
+        draft: enrichedSnapshot.input,
+        completionScore: 100,
+        readyForReport: true,
+        missingFields: [],
+        didacticTip:
+          "La investigación académica ya alimentó el score con señales externas, supuestos e inferencias estructuradas.",
+        recommendedNextFocus: "Revisar dossier académico y score ejecutivo"
+      });
+      router.push("/resultado");
+    } catch (currentError) {
+      setError(currentError instanceof Error ? currentError.message : "No fue posible investigar el proyecto.");
+    } finally {
+      setResearchLoading(false);
+    }
+  };
+
   if (!session) {
     return null;
   }
@@ -345,6 +406,10 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
                   La IA hace preguntas didácticas, extrae datos y te lleva a un informe sin obligarte a llenar cada campo manualmente.
                 </p>
                 <div className="flex gap-3">
+                  <Button variant="secondary" onClick={runAcademicResearch} disabled={researchLoading}>
+                    {researchLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                    Investigar con IA + score
+                  </Button>
                   <Button variant="secondary" onClick={generateReport} disabled={reportLoading}>
                     {reportLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ClipboardList className="mr-2 h-4 w-4" />}
                     Generar informe ahora
@@ -372,6 +437,30 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
               <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Siguiente foco sugerido</p>
               <p className="mt-2 font-medium text-slate-950 dark:text-slate-50">{session.recommendedNextFocus}</p>
+            </div>
+          </Card>
+
+          <Card>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              Investigación académica asistida
+            </p>
+            <h3 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+              Investigar, estructurar, puntuar
+            </h3>
+            <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Este modo usa Gemini para investigar el caso, reunir hallazgos con fuentes, inferir variables cuantificables
+              y alimentar el scoring final. Luego construye el dashboard ejecutivo con esa base investigada.
+            </p>
+            <div className="mt-5 grid gap-3">
+              {[
+                "1. Investigar el macro y microentorno",
+                "2. Traducir hallazgos a variables de scoring",
+                "3. Calcular score y generar vista ejecutiva"
+              ].map((item) => (
+                <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                  {item}
+                </div>
+              ))}
             </div>
           </Card>
 

@@ -23,6 +23,8 @@ type ReportTabId =
   | "score"
   | "metodologia"
   | "contexto"
+  | "investigacion"
+  | "fuentes"
   | "graficos"
   | "septe"
   | "porter"
@@ -74,6 +76,8 @@ export function ReportPage() {
     { id: "score", label: "Score final" },
     { id: "metodologia", label: "Metodología" },
     { id: "contexto", label: "Contexto" },
+    { id: "investigacion", label: "Investigación" },
+    { id: "fuentes", label: "Fuentes" },
     { id: "graficos", label: "Gráficos" },
     { id: "septe", label: "SEPTE" },
     { id: "porter", label: "Porter" },
@@ -244,6 +248,102 @@ export function ReportPage() {
               ))}
             </div>
           </Card>
+        ) : null}
+
+        {activeTab === "investigacion" ? (
+          <div className="space-y-6">
+            <Card>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Expediente de investigación
+              </p>
+              <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                {snapshot.research?.projectSummary ??
+                  "Aún no hay expediente académico enriquecido para este caso. Usa la opción de investigación asistida para generar hallazgos, fuentes y variables que alimenten el score."}
+              </p>
+            </Card>
+
+            {snapshot.research ? (
+              <div className="grid gap-6">
+                {[
+                  ["Macro y microentorno", snapshot.research.sections.macroMicro],
+                  ["FODA", snapshot.research.sections.foda],
+                  ["Ventaja competitiva", snapshot.research.sections.competitiveAdvantage],
+                  ["Estudio de mercado", snapshot.research.sections.marketStudy],
+                  ["Competencia", snapshot.research.sections.competitionStudy],
+                  ["Promoción", snapshot.research.sections.promotionPlan],
+                  ["Operación y RRHH", snapshot.research.sections.operationAndHR],
+                  ["Legalidad y barreras", snapshot.research.sections.legalBarriers],
+                  ["Conclusión académica", snapshot.research.sections.conclusion]
+                ].map(([label, value]) => (
+                  <Card key={label}>
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      {label}
+                    </p>
+                    <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{value}</p>
+                  </Card>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {activeTab === "fuentes" ? (
+          <div className="space-y-6">
+            <Card>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Fuentes consultadas
+              </p>
+              {snapshot.research?.sources?.length ? (
+                <div className="mt-5 grid gap-3">
+                  {snapshot.research.sources.map((source) => (
+                    <div
+                      key={`${source.title}-${source.url}`}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <p className="font-medium text-slate-950 dark:text-slate-50">{source.title}</p>
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 block text-sm text-blue-700 underline dark:text-blue-300"
+                      >
+                        {source.url}
+                      </a>
+                      <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{source.note}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                  Aún no hay fuentes visibles porque este caso no se generó desde la investigación asistida.
+                </p>
+              )}
+            </Card>
+
+            {snapshot.research?.scoringInferences?.length ? (
+              <Card>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Variables inferidas para el scoring
+                </p>
+                <div className="mt-5 grid gap-3">
+                  {snapshot.research.scoringInferences.map((item) => (
+                    <div
+                      key={`${item.variable}-${item.rationale}`}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="font-medium text-slate-950 dark:text-slate-50">{item.variable}</p>
+                        <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-950">
+                          {String(item.value)}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{item.rationale}</p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ) : null}
+          </div>
         ) : null}
 
         {activeTab === "graficos" ? (

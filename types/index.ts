@@ -92,6 +92,66 @@ export type ReportNarrative = {
   blockNarratives: Record<BlockId, ReportBlockNarrative>;
 };
 
+export type ResearchSectionId =
+  | "macroMicro"
+  | "foda"
+  | "competitiveAdvantage"
+  | "marketStudy"
+  | "competitionStudy"
+  | "promotionPlan"
+  | "operationAndHR"
+  | "legalBarriers"
+  | "conclusion";
+
+export type ResearchSource = {
+  title: string;
+  url: string;
+  note: string;
+};
+
+export type ResearchFinding = {
+  section: ResearchSectionId;
+  title: string;
+  summary: string;
+  evidence: string;
+  sourceTitles: string[];
+};
+
+export type ScoringInference = {
+  variable: string;
+  value: string | number;
+  rationale: string;
+  sourceTitles: string[];
+};
+
+export type ResearchDossier = {
+  query: string;
+  projectSummary: string;
+  sections: Record<ResearchSectionId, string>;
+  findings: ResearchFinding[];
+  sources: ResearchSource[];
+  scoringInferences: ScoringInference[];
+  inferredProjectPatch: Partial<ProjectInput>;
+  inferredLocationSignals: Partial<
+    Pick<
+      LocationContext,
+      | "tourismLevel"
+      | "commercialFlow"
+      | "competitivePressure"
+      | "economicStability"
+      | "priceSensitivity"
+      | "regulatoryEase"
+      | "digitalizationLevel"
+      | "marketAttractiveness"
+      | "narrative"
+    >
+  >;
+  assumptions: string[];
+  provider?: string;
+  model?: string;
+  generatedAt: string;
+};
+
 export type FactorScore = {
   id: string;
   label: string;
@@ -158,6 +218,7 @@ export type EvaluationSnapshot = {
   context: LocationContext;
   scoreBreakdown: ScoreBreakdown;
   insights: InsightReport;
+  research?: ResearchDossier;
   generatedAt: string;
 };
 

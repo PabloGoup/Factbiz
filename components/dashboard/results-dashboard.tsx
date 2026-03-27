@@ -434,6 +434,42 @@ export function ResultsDashboard() {
         </Card>
       </div>
 
+      {snapshot.research ? (
+        <Card className="mt-5 p-5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Investigación académica aplicada
+              </p>
+              <h3 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                El score se alimentó con hallazgos y fuentes
+              </h3>
+            </div>
+            <Link href="/informe">
+              <Button variant="secondary">
+                <FileText className="mr-2 h-4 w-4" />
+                Ver expediente y fuentes
+              </Button>
+            </Link>
+          </div>
+          <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">{snapshot.research.projectSummary}</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Hallazgos</p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-950 dark:text-slate-50">{snapshot.research.findings.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Fuentes</p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-950 dark:text-slate-50">{snapshot.research.sources.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Inferencias scoring</p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-950 dark:text-slate-50">{snapshot.research.scoringInferences.length}</p>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
         <Card className="p-5">
           <div className="flex items-center justify-between gap-4">

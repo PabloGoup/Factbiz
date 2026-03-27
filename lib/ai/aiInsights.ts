@@ -7,6 +7,7 @@ import type {
   ProjectInput,
   ReportBlockNarrative,
   ReportNarrative,
+  ResearchDossier,
   ScoreBreakdown
 } from "@/types";
 import { BLOCK_LABELS } from "@/lib/constants";
@@ -136,6 +137,106 @@ function buildReportNarrative(input: ProjectInput, context: LocationContext, sco
   };
 }
 
+function firstSentences(text: string, maxSentences = 2) {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter(Boolean)
+    .slice(0, maxSentences)
+    .join(" ")
+    .trim();
+}
+
+function sectionForBlock(blockId: BlockId, research: ResearchDossier) {
+  switch (blockId) {
+    case "septe":
+      return research.sections.macroMicro;
+    case "porter":
+      return research.sections.competitionStudy;
+    case "foda":
+      return research.sections.foda;
+    case "mercado":
+      return research.sections.marketStudy;
+    case "finanzas":
+      return `${research.sections.marketStudy}\n\n${research.sections.conclusion}`;
+    case "operacionLegalidad":
+      return `${research.sections.operationAndHR}\n\n${research.sections.legalBarriers}`;
+    default:
+      return research.projectSummary;
+  }
+}
+
+function factorNarrativesFromResearch(block: BlockScore, research: ResearchDossier) {
+  return block.factors.slice(0, 5).map((factor) => {
+    const relatedFinding = research.scoringInferences.find((inference) =>
+      inference.variable.toLowerCase().includes(factor.label.toLowerCase().split(" ")[0])
+    );
+
+    return {
+      label: factor.label,
+      headline: `${factor.label} registra ${factor.score.toFixed(1)}/10.`,
+      assessment: relatedFinding?.rationale ?? factor.note,
+      impact:
+        factor.score >= 7
+          ? "La evidencia investigada favorece este frente y mejora la defensa estratégica del proyecto."
+          : factor.score >= 5
+            ? "La evidencia investigada muestra un frente viable, pero todavía condicionado por ejecución y ajustes."
+            : "La evidencia investigada sugiere una restricción relevante que presiona la factibilidad del proyecto."
+    };
+  });
+}
+
+function buildResearchBackedNarrative(
+  input: ProjectInput,
+  context: LocationContext,
+  scoreBreakdown: ScoreBreakdown,
+  research: ResearchDossier
+): ReportNarrative {
+  const blockNarratives = scoreBreakdown.blocks.reduce<Record<BlockId, ReportBlockNarrative>>((accumulator, block) => {
+    const sectionText = sectionForBlock(block.id, research);
+    const relatedFindings = research.findings
+      .filter((finding) => {
+        if (block.id === "septe") return finding.section === "macroMicro";
+        if (block.id === "porter") return finding.section === "competitionStudy";
+        if (block.id === "foda") return finding.section === "foda";
+        if (block.id === "mercado") return finding.section === "marketStudy";
+        if (block.id === "finanzas") return finding.section === "marketStudy" || finding.section === "conclusion";
+        return finding.section === "operationAndHR" || finding.section === "legalBarriers";
+      })
+      .slice(0, 3);
+
+    accumulator[block.id] = {
+      summary: firstSentences(sectionText, 1) || block.summary,
+      detailedAnalysis: sectionText,
+      positives:
+        relatedFindings.map((finding) => finding.summary).slice(0, 3).filter(Boolean).length > 0
+          ? relatedFindings.map((finding) => finding.summary).slice(0, 3)
+          : block.positives.slice(0, 3),
+      risks:
+        relatedFindings.map((finding) => finding.evidence).slice(0, 3).filter(Boolean).length > 0
+          ? relatedFindings.map((finding) => finding.evidence).slice(0, 3)
+          : block.risks.slice(0, 3),
+      recommendation: block.score >= 7
+        ? "Capitalizar esta evidencia en un plan de ejecución medible y defendible."
+        : block.score >= 5
+          ? "Usar los hallazgos de investigación para cerrar brechas antes de escalar la inversión."
+          : "Reformular el proyecto en este frente antes de avanzar con una implementación completa.",
+      factorNarratives: factorNarrativesFromResearch(block, research)
+    };
+
+    return accumulator;
+  }, {} as Record<BlockId, ReportBlockNarrative>);
+
+  return {
+    scoreSummary: `${research.projectSummary} El score sintetiza esta investigación y ubica el caso en ${scoreBreakdown.finalScore.toFixed(
+      1
+    )}/10 con clasificación "${scoreBreakdown.classification}".`,
+    methodology: `La metodología combinó investigación académica asistida por IA con inferencias estructuradas y scoring multicriterio. A partir del dossier investigado se tradujeron señales de industria, competencia, mercado, operación y barreras regulatorias a variables cuantificables para la evaluación final.`,
+    contextSummary: `${buildContextSummary(input, context)} La investigación complementaria agregó fuentes y hallazgos aplicados al país, ciudad y sector objetivo.`,
+    chartsSummary: `Los gráficos condensan un expediente investigado por IA: permiten ver dónde la evidencia territorial y competitiva sostiene la tesis y dónde todavía aparecen restricciones materiales para el proyecto.`,
+    blockNarratives
+  };
+}
+
 function severityPrefix(severity: "alta" | "media" | "baja") {
   if (severity === "alta") return "Crítico";
   if (severity === "media") return "Prioritario";
@@ -203,6 +304,44 @@ export function generateMockAiInsights(
     source: "mock",
     provider: "local-rules",
     generatedAt: new Date().toISOString()
+  };
+}
+
+export function generateResearchBackedInsights(
+  input: ProjectInput,
+  context: LocationContext,
+  scoreBreakdown: ScoreBreakdown,
+  research: ResearchDossier
+): InsightReport {
+  const reportNarrative = buildResearchBackedNarrative(input, context, scoreBreakdown, research);
+  const mainFindings = research.findings.slice(0, 5).map((finding) => finding.summary);
+  const opportunities = research.findings
+    .filter((finding) => ["competitiveAdvantage", "marketStudy", "promotionPlan"].includes(finding.section))
+    .slice(0, 5)
+    .map((finding) => finding.evidence);
+  const recommendations = [
+    ...research.assumptions.slice(0, 2).map((assumption) => `Validar el supuesto crítico: ${assumption}`),
+    ...scoreBreakdown.blocks
+      .sort((left, right) => left.score - right.score)
+      .slice(0, 3)
+      .map((block) => `Priorizar ajustes en ${block.label}: ${reportNarrative.blockNarratives[block.id].recommendation}`)
+  ].slice(0, 6);
+
+  return {
+    executiveSummary: research.projectSummary,
+    scoreExplanation: buildScoreExplanation(scoreBreakdown),
+    mainFindings,
+    opportunities: opportunities.length > 0 ? opportunities : scoreBreakdown.opportunities.slice(0, 5),
+    recommendations,
+    principalRisks: scoreBreakdown.risks.slice(0, 6),
+    conclusion: research.sections.conclusion,
+    methodologyNote:
+      "El informe final se construyó a partir del dossier de investigación generado por Gemini y luego se sintetizó con el motor de scoring de factibilidad.",
+    reportNarrative,
+    source: "gemini",
+    provider: "gemini-research-fallback",
+    generatedAt: new Date().toISOString(),
+    fallbackReason: "Se reutilizó el dossier de investigación para completar la salida ejecutiva porque la última capa estructurada de insights no respondió de forma válida."
   };
 }
 
