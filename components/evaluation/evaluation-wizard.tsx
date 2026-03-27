@@ -4,7 +4,7 @@ import Link from "next/link";
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Download, FileCheck2, RefreshCcw, Save, Sparkles } from "lucide-react";
 import { z } from "zod";
 
@@ -84,9 +84,8 @@ const weightLabels: Record<BlockId, string> = {
   operacionLegalidad: "Operación y legalidad"
 };
 
-export function EvaluationWizard() {
+export function EvaluationWizard({ demoId }: { demoId?: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [step, setStep] = useState(1);
   const [weights, setWeights] = useState<ProjectWeights>(DEFAULT_WEIGHTS);
   const [hydrated, setHydrated] = useState(false);
@@ -111,7 +110,6 @@ export function EvaluationWizard() {
     control,
     defaultValue: EMPTY_PROJECT
   }) as ProjectInput;
-  const demoId = searchParams.get("demo");
   const serializedValues = useMemo(() => JSON.stringify(values), [values]);
   const previewSnapshot = useMemo(() => buildEvaluationSnapshot(values, weights), [values, weights]);
 

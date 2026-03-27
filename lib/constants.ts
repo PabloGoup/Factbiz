@@ -3,7 +3,8 @@ import type { BlockId, ProjectInput, ProjectWeights } from "@/types";
 export const STORAGE_KEYS = {
   project: "factibiz.project",
   weights: "factibiz.weights",
-  evaluation: "factibiz.evaluation"
+  evaluation: "factibiz.evaluation",
+  interview: "factibiz.interview"
 } as const;
 
 export const BLOCK_LABELS: Record<BlockId, string> = {

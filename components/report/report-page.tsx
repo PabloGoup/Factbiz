@@ -18,8 +18,24 @@ import { formatDate, formatMoney, getCurrencyByCountry } from "@/lib/utils";
 import { demoProjects } from "@/data/demoProjects";
 import type { EvaluationSnapshot } from "@/types";
 
+type ReportTabId =
+  | "resumen"
+  | "score"
+  | "metodologia"
+  | "contexto"
+  | "graficos"
+  | "septe"
+  | "porter"
+  | "foda"
+  | "mercado"
+  | "finanzas"
+  | "operacionLegalidad"
+  | "conclusion"
+  | "recomendaciones";
+
 export function ReportPage() {
   const [snapshot, setSnapshot] = useState<EvaluationSnapshot | null>(null);
+  const [activeTab, setActiveTab] = useState<ReportTabId>("resumen");
 
   useEffect(() => {
     const stored = getStoredEvaluation();
@@ -43,6 +59,40 @@ export function ReportPage() {
       </div>
     );
   }
+
+  const contextMetrics = [
+    ["Turismo", snapshot.context.tourismLevel],
+    ["Flujo comercial", snapshot.context.commercialFlow],
+    ["Presión competitiva", snapshot.context.competitivePressure],
+    ["Estabilidad económica", snapshot.context.economicStability],
+    ["Sensibilidad al precio", snapshot.context.priceSensitivity],
+    ["Digitalización", snapshot.context.digitalizationLevel],
+    ["Atractivo del mercado", snapshot.context.marketAttractiveness]
+  ] as const;
+  const tabs: { id: ReportTabId; label: string }[] = [
+    { id: "resumen", label: "Resumen" },
+    { id: "score", label: "Score final" },
+    { id: "metodologia", label: "Metodología" },
+    { id: "contexto", label: "Contexto" },
+    { id: "graficos", label: "Gráficos" },
+    { id: "septe", label: "SEPTE" },
+    { id: "porter", label: "Porter" },
+    { id: "foda", label: "FODA" },
+    { id: "mercado", label: "Mercado" },
+    { id: "finanzas", label: "Finanzas" },
+    { id: "operacionLegalidad", label: "Operación" },
+    { id: "conclusion", label: "Conclusión" },
+    { id: "recomendaciones", label: "Recomendaciones" }
+  ];
+  const activeBlock =
+    activeTab === "septe" ||
+    activeTab === "porter" ||
+    activeTab === "foda" ||
+    activeTab === "mercado" ||
+    activeTab === "finanzas" ||
+    activeTab === "operacionLegalidad"
+      ? snapshot.scoreBreakdown.blocks.find((block) => block.id === activeTab)
+      : null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -79,12 +129,19 @@ export function ReportPage() {
               </p>
               <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
                 <Bot className="h-3.5 w-3.5" />
-                {snapshot.insights.source === "openai"
-                  ? `OpenAI${snapshot.insights.model ? ` · ${snapshot.insights.model}` : ""}`
+                {snapshot.insights.source === "gemini"
+                  ? `Gemini${snapshot.insights.model ? ` · ${snapshot.insights.model}` : ""}`
                   : "Simulación local"}
               </div>
+              <p className="mt-3 text-xs leading-6 text-slate-500 dark:text-slate-400">
+                Cuando la fuente es Gemini, el modelo redacta resumen, lectura del score, metodología, contexto,
+                detalle por bloque, conclusión y recomendaciones. El score, la clasificación y los gráficos siguen
+                siendo calculados por el motor interno del proyecto.
+              </p>
               <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.executiveSummary}</p>
-              <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.conclusion}</p>
+              <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                {snapshot.insights.reportNarrative.scoreSummary}
+              </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Fecha</p>
@@ -110,76 +167,147 @@ export function ReportPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="no-print p-4">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-            Metodología usada
+            Explorador del informe
           </p>
-          <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
-            El informe combina una matriz multicriterio compuesta por SEPTE, Porter, FODA, mercado, finanzas y
-            operación / legalidad. Cada bloque recibe un peso configurable y se descompone en subdimensiones
-            evaluadas con entradas del usuario y contexto automático por ubicación.
-          </p>
-          <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.methodologyNote}</p>
-        </Card>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Scores por bloque
-            </p>
-            <BlocksBarChart blocks={snapshot.scoreBreakdown.blocks} />
-          </Card>
-          <Card>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Proyección simple de ventas
-            </p>
-            <SalesProjectionChart
-              data={snapshot.scoreBreakdown.salesProjection}
-              currency={getCurrencyByCountry(snapshot.input.country)}
-            />
-          </Card>
-        </div>
-
-        <Card>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-            Datos clave del proyecto
-          </p>
-          <div className="mt-5 grid gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Tipo</p>
-              <p className="mt-2 font-medium text-slate-950 dark:text-slate-50">{snapshot.input.businessType}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Rubro</p>
-              <p className="mt-2 font-medium text-slate-950 dark:text-slate-50">{snapshot.input.sector}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Inversión</p>
-              <p className="mt-2 font-medium text-slate-950 dark:text-slate-50">
-                {formatMoney(snapshot.input.initialInvestment, snapshot.input.country)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Ventas proyectadas</p>
-              <p className="mt-2 font-medium text-slate-950 dark:text-slate-50">
-                {formatMoney(snapshot.input.monthlySalesProjection, snapshot.input.country)}
-              </p>
-            </div>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            {tabs.map((tab) => (
+              <Button
+                key={tab.id}
+                variant={activeTab === tab.id ? "primary" : "secondary"}
+                className="whitespace-nowrap px-3 py-2 text-xs"
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </Button>
+            ))}
           </div>
         </Card>
 
-        {snapshot.scoreBreakdown.blocks.map((block) => (
-          <Card key={block.id}>
+        {activeTab === "resumen" ? (
+          <Card>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              Resumen ejecutivo
+            </p>
+            <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.executiveSummary}</p>
+            <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.mainFindings.join(" ")}</p>
+          </Card>
+        ) : null}
+
+        {activeTab === "score" ? (
+          <Card>
+            <div className="grid gap-6 md:grid-cols-[0.8fr_1.2fr] md:items-center">
+              <div className="rounded-[32px] border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+                <ScoreBadge
+                  score={snapshot.scoreBreakdown.finalScore}
+                  classification={snapshot.scoreBreakdown.classification}
+                />
+                <FinalScoreDonut score={snapshot.scoreBreakdown.finalScore} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Score final
+                </p>
+                <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.reportNarrative.scoreSummary}</p>
+                <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.scoreExplanation}</p>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        {activeTab === "metodologia" ? (
+          <Card>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              Metodología usada
+            </p>
+            <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.reportNarrative.methodology}</p>
+            <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.methodologyNote}</p>
+          </Card>
+        ) : null}
+
+        {activeTab === "contexto" ? (
+          <Card>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              Contexto territorial
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+              {snapshot.context.city}, {snapshot.context.region}, {snapshot.context.country}
+            </h2>
+            <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.reportNarrative.contextSummary}</p>
+            <div className="mt-6 grid gap-4 md:grid-cols-4">
+              {contextMetrics.map(([label, value]) => (
+                <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{label}</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">{Number(value).toFixed(1)}/10</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
+
+        {activeTab === "graficos" ? (
+          <div className="space-y-6">
+            <Card>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Gráficos clave
+              </p>
+              <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.reportNarrative.chartsSummary}</p>
+            </Card>
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Scores por bloque</p>
+                <BlocksBarChart blocks={snapshot.scoreBreakdown.blocks} />
+              </Card>
+              <Card>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Proyección simple de ventas</p>
+                <SalesProjectionChart
+                  data={snapshot.scoreBreakdown.salesProjection}
+                  currency={getCurrencyByCountry(snapshot.input.country)}
+                />
+              </Card>
+            </div>
+          </div>
+        ) : null}
+
+        {activeBlock ? (
+          <Card key={activeBlock.id}>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  Detalle
+                  Detalle del bloque
                 </p>
-                <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{block.label}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{block.summary}</p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{activeBlock.label}</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                  {snapshot.insights.reportNarrative.blockNarratives[activeBlock.id].summary}
+                </p>
               </div>
               <div className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white dark:bg-slate-100 dark:text-slate-950">
-                {block.score.toFixed(1)} / 10
+                {activeBlock.score.toFixed(1)} / 10
+              </div>
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Lecturas favorables</p>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                  {snapshot.insights.reportNarrative.blockNarratives[activeBlock.id].positives.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Alertas</p>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                  {snapshot.insights.reportNarrative.blockNarratives[activeBlock.id].risks.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Recomendación</p>
+                <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                  {snapshot.insights.reportNarrative.blockNarratives[activeBlock.id].recommendation}
+                </p>
               </div>
             </div>
             <div className="mt-5 overflow-x-auto">
@@ -192,7 +320,7 @@ export function ReportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {block.factors.map((factor) => (
+                  {activeBlock.factors.map((factor) => (
                     <tr key={factor.id} className="border-t border-slate-200 dark:border-slate-800">
                       <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{factor.label}</td>
                       <td className="py-3 text-slate-600 dark:text-slate-300">{factor.score.toFixed(1)}</td>
@@ -203,30 +331,41 @@ export function ReportPage() {
               </table>
             </div>
           </Card>
-        ))}
+        ) : null}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Riesgos principales
-            </p>
-            <div className="mt-5 grid gap-3">
-              {snapshot.insights.principalRisks.map((risk) => (
-                <div key={`${risk.relatedBlock}-${risk.title}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="font-medium text-slate-950 dark:text-slate-50">{risk.title}</p>
-                    <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase text-amber-900 dark:bg-amber-950/60 dark:text-amber-100">
-                      {risk.severity}
-                    </span>
+        {activeTab === "conclusion" ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Riesgos principales
+              </p>
+              <div className="mt-5 grid gap-3">
+                {snapshot.insights.principalRisks.map((risk) => (
+                  <div key={`${risk.relatedBlock}-${risk.title}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="font-medium text-slate-950 dark:text-slate-50">{risk.title}</p>
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase text-amber-900 dark:bg-amber-950/60 dark:text-amber-100">
+                        {risk.severity}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{risk.detail}</p>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{risk.detail}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
+                ))}
+              </div>
+            </Card>
+            <Card>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Conclusión final
+              </p>
+              <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.conclusion}</p>
+            </Card>
+          </div>
+        ) : null}
+
+        {activeTab === "recomendaciones" ? (
           <Card>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Recomendaciones finales
+              Recomendaciones
             </p>
             <div className="mt-5 grid gap-3">
               {snapshot.insights.recommendations.map((recommendation) => (
@@ -236,7 +375,8 @@ export function ReportPage() {
               ))}
             </div>
           </Card>
-        </div>
+        ) : null}
+
       </article>
     </div>
   );

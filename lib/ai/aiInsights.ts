@@ -1,4 +1,14 @@
-import type { EvaluationSnapshot, InsightReport, LocationContext, ProjectInput, ScoreBreakdown } from "@/types";
+import type {
+  BlockId,
+  BlockScore,
+  EvaluationSnapshot,
+  InsightReport,
+  LocationContext,
+  ProjectInput,
+  ReportBlockNarrative,
+  ReportNarrative,
+  ScoreBreakdown
+} from "@/types";
 import { BLOCK_LABELS } from "@/lib/constants";
 
 function topBlocks(scoreBreakdown: ScoreBreakdown) {
@@ -28,6 +38,88 @@ function buildScoreExplanation(scoreBreakdown: ScoreBreakdown) {
   )}, mientras que las principales restricciones aparecen en ${weak.join(
     " y "
   )}. La lectura integrada indica que el proyecto no depende solo de una buena idea, sino de cómo resuelve estructura competitiva, control operativo y coherencia financiera.`;
+}
+
+function buildReportMethodology(scoreBreakdown: ScoreBreakdown) {
+  const weightSummary = scoreBreakdown.blocks
+    .map((block) => `${block.label} (${block.weight}%)`)
+    .join(", ");
+
+  return `La metodología combina un motor multicriterio con ponderaciones configurables para ${weightSummary}. El resultado integra datos declarados del proyecto, contexto territorial por ubicación y una interpretación ejecutiva que prioriza consistencia estratégica, capacidad de ejecución y sostenibilidad financiera.`;
+}
+
+function buildContextSummary(input: ProjectInput, context: LocationContext) {
+  return `Para ${input.projectName}, la lectura territorial en ${context.city}, ${context.region}, ${context.country} combina turismo ${context.tourismLevel.toFixed(
+    1
+  )}/10, flujo comercial ${context.commercialFlow.toFixed(1)}/10, presión competitiva ${context.competitivePressure.toFixed(
+    1
+  )}/10, estabilidad económica ${context.economicStability.toFixed(1)}/10, sensibilidad al precio ${context.priceSensitivity.toFixed(
+    1
+  )}/10, digitalización ${context.digitalizationLevel.toFixed(1)}/10 y atractivo del mercado ${context.marketAttractiveness.toFixed(
+    1
+  )}/10. ${context.narrative}`;
+}
+
+function buildScoreSummary(scoreBreakdown: ScoreBreakdown) {
+  const sorted = topBlocks(scoreBreakdown);
+  const strongest = sorted[0];
+  const weakest = sorted[sorted.length - 1];
+
+  return `El score final de ${scoreBreakdown.finalScore.toFixed(1)}/10 ubica el caso como "${
+    scoreBreakdown.classification
+  }". La lectura ejecutiva se sostiene en ${strongest.label}, mientras que el principal cuello de botella aparece en ${weakest.label}. La recomendación no depende de un solo indicador: se basa en la coherencia entre mercado, finanzas, competencia y viabilidad operacional.`;
+}
+
+function buildChartsSummary(input: ProjectInput, scoreBreakdown: ScoreBreakdown) {
+  const strongest = [...scoreBreakdown.blocks].sort((left, right) => right.score - left.score)[0];
+  const weakest = [...scoreBreakdown.blocks].sort((left, right) => left.score - right.score)[0];
+  const lastProjection = scoreBreakdown.salesProjection[scoreBreakdown.salesProjection.length - 1];
+
+  return `Los gráficos clave muestran una dispersión clara entre el bloque más sólido (${strongest.label}) y el más exigente (${weakest.label}). La proyección simple de ventas cierra en ${
+    lastProjection?.sales?.toLocaleString("es-CL") ?? "0"
+  } al final del horizonte simulado, por lo que la lectura visual respalda una decisión de avance gradual con foco en control de riesgo.`;
+}
+
+function buildBlockRecommendation(block: BlockScore) {
+  if (block.score >= 7) {
+    return `Mantener la ventaja actual en ${block.label} y convertirla en un argumento operativo medible para la etapa piloto.`;
+  }
+
+  if (block.score >= 5) {
+    return `Cerrar brechas específicas en ${block.label} antes de escalar inversión o compromisos fijos de largo plazo.`;
+  }
+
+  return `Rediseñar la tesis de ${block.label} porque hoy es un factor que compromete la factibilidad global del proyecto.`;
+}
+
+function buildBlockNarrative(block: BlockScore): ReportBlockNarrative {
+  return {
+    summary: `${block.summary} El bloque cierra con ${block.score.toFixed(1)}/10 y un peso de ${block.weight}%, por lo que su incidencia en la recomendación final es material.`,
+    positives:
+      block.positives.length > 0
+        ? block.positives.slice(0, 3)
+        : ["No se observaron ventajas dominantes en este bloque; la lectura es más bien de equilibrio o transición."],
+    risks:
+      block.risks.length > 0
+        ? block.risks.slice(0, 3)
+        : ["No aparece un riesgo crítico aislado, pero sí conviene monitorear la consistencia de este bloque durante la validación."],
+    recommendation: buildBlockRecommendation(block)
+  };
+}
+
+function buildReportNarrative(input: ProjectInput, context: LocationContext, scoreBreakdown: ScoreBreakdown): ReportNarrative {
+  const blockNarratives = scoreBreakdown.blocks.reduce<Record<BlockId, ReportBlockNarrative>>((accumulator, block) => {
+    accumulator[block.id] = buildBlockNarrative(block);
+    return accumulator;
+  }, {} as Record<BlockId, ReportBlockNarrative>);
+
+  return {
+    scoreSummary: buildScoreSummary(scoreBreakdown),
+    methodology: buildReportMethodology(scoreBreakdown),
+    contextSummary: buildContextSummary(input, context),
+    chartsSummary: buildChartsSummary(input, scoreBreakdown),
+    blockNarratives
+  };
 }
 
 function severityPrefix(severity: "alta" | "media" | "baja") {
@@ -92,7 +184,8 @@ export function generateMockAiInsights(
           ? "El proyecto puede avanzar en formato piloto, condicionado a resolver fricciones clave antes de una expansión mayor."
           : "La recomendación es no avanzar con la configuración actual sin rediseñar la propuesta, el alcance o la estructura económica.",
     methodologyNote:
-      "Este resultado fue generado por la capa local de simulación. Si se configura OpenAI, la app puede reemplazar esta salida por un análisis redactado por modelo real.",
+      "Este resultado fue generado por la capa local de simulación. Si se configura Gemini, la app puede reemplazar esta salida por un análisis redactado por modelo real.",
+    reportNarrative: buildReportNarrative(input, context, scoreBreakdown),
     source: "mock",
     provider: "local-rules",
     generatedAt: new Date().toISOString()
@@ -132,6 +225,25 @@ export function buildAiInsightPrompt(
           risks: block.risks,
           factors: block.factors
         }))
+      },
+      salidaEsperada: {
+        executiveSummary: "Resumen ejecutivo compacto para cabecera del dashboard y del informe",
+        scoreExplanation: "Lectura técnica del score final y su clasificación",
+        methodologyNote: "Explicación general breve de la metodología",
+        reportNarrative: {
+          scoreSummary: "Texto de informe para la sección score final",
+          methodology: "Texto de informe para la sección metodología usada",
+          contextSummary: "Texto de informe que conecte país, región y ciudad con el proyecto",
+          chartsSummary: "Lectura ejecutiva de los gráficos clave",
+          blockNarratives: {
+            septe: "Detalle narrativo del bloque SEPTE",
+            porter: "Detalle narrativo del bloque Porter",
+            foda: "Detalle narrativo del bloque FODA",
+            mercado: "Detalle narrativo del bloque Mercado",
+            finanzas: "Detalle narrativo del bloque Finanzas",
+            operacionLegalidad: "Detalle narrativo del bloque Operación y legalidad"
+          }
+        }
       }
     },
     null,

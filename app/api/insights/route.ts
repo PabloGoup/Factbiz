@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { generateMockAiInsights } from "@/lib/ai/aiInsights";
-import { generateOpenAiInsights, isOpenAiConfigured } from "@/lib/ai/openai";
+import { describeGeminiError, generateGeminiInsights, isGeminiConfigured } from "@/lib/ai/gemini";
 import type { LocationContext, ProjectInput, ScoreBreakdown } from "@/types";
 
 const blockIdSchema = z.enum(["septe", "porter", "foda", "mercado", "finanzas", "operacionLegalidad"]);
@@ -44,7 +44,9 @@ const requestSchema = z.object({
       z.object({
         id: blockIdSchema,
         label: z.string(),
+        weight: z.number(),
         score: z.number(),
+        contribution: z.number(),
         summary: z.string(),
         positives: z.array(z.string()),
         risks: z.array(z.string()),
@@ -69,24 +71,36 @@ export async function POST(request: Request) {
       scoreBreakdown: ScoreBreakdown;
     };
 
-    if (!isOpenAiConfigured()) {
+    if (!isGeminiConfigured()) {
       const fallbackInsights = generateMockAiInsights(payload.input, payload.context, payload.scoreBreakdown);
 
       return NextResponse.json({
         insights: {
           ...fallbackInsights,
-          fallbackReason: "OPENAI_API_KEY no está configurada en el servidor."
+          fallbackReason: "GEMINI_API_KEY no está configurada en el servidor."
         },
         mode: "mock"
       });
     }
 
-    const insights = await generateOpenAiInsights(payload.input, payload.context, payload.scoreBreakdown);
+    try {
+      const insights = await generateGeminiInsights(payload.input, payload.context, payload.scoreBreakdown);
 
-    return NextResponse.json({
-      insights,
-      mode: "openai"
-    });
+      return NextResponse.json({
+        insights,
+        mode: "gemini"
+      });
+    } catch (providerError) {
+      const fallbackInsights = generateMockAiInsights(payload.input, payload.context, payload.scoreBreakdown);
+
+      return NextResponse.json({
+        insights: {
+          ...fallbackInsights,
+          fallbackReason: describeGeminiError(providerError)
+        },
+        mode: "mock"
+      });
+    }
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

@@ -70,6 +70,21 @@ export type LocationContext = {
   source: "preset" | "heuristic";
 };
 
+export type ReportBlockNarrative = {
+  summary: string;
+  positives: string[];
+  risks: string[];
+  recommendation: string;
+};
+
+export type ReportNarrative = {
+  scoreSummary: string;
+  methodology: string;
+  contextSummary: string;
+  chartsSummary: string;
+  blockNarratives: Record<BlockId, ReportBlockNarrative>;
+};
+
 export type FactorScore = {
   id: string;
   label: string;
@@ -117,7 +132,8 @@ export type InsightReport = {
   principalRisks: RiskItem[];
   conclusion: string;
   methodologyNote: string;
-  source: "mock" | "openai";
+  reportNarrative: ReportNarrative;
+  source: "mock" | "gemini";
   provider?: string;
   model?: string;
   generatedAt?: string;
@@ -136,4 +152,40 @@ export type EvaluationSnapshot = {
   scoreBreakdown: ScoreBreakdown;
   insights: InsightReport;
   generatedAt: string;
+};
+
+export type ChatRole = "assistant" | "user";
+
+export type ChatMessage = {
+  id: string;
+  role: ChatRole;
+  content: string;
+  createdAt: string;
+};
+
+export type ProjectDraft = Partial<ProjectInput>;
+
+export type InterviewTurnResult = {
+  assistantMessage: string;
+  didacticTip: string;
+  completionScore: number;
+  readyForReport: boolean;
+  recommendedNextFocus: string;
+  missingFields: string[];
+  quickReplies: string[];
+  projectPatch: ProjectDraft;
+  source: "gemini" | "mock";
+  model?: string;
+};
+
+export type InterviewSession = {
+  messages: ChatMessage[];
+  draft: ProjectDraft;
+  completionScore: number;
+  readyForReport: boolean;
+  missingFields: string[];
+  quickReplies: string[];
+  didacticTip?: string;
+  recommendedNextFocus?: string;
+  lastModel?: string;
 };

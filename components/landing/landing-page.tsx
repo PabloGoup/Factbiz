@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BarChart3,
-  Building2,
+  Bot,
   FileOutput,
-  Gauge,
+  MessageSquareText,
   MapPinned,
   Sparkles
 } from "lucide-react";
@@ -22,9 +22,9 @@ import { formatMoney } from "@/lib/utils";
 
 const benefits = [
   {
-    title: "Scoring ejecutivo real",
-    description: "Integra SEPTE, Porter, FODA, mercado, finanzas y operación con pesos configurables.",
-    icon: Gauge
+    title: "Entrevista guiada por IA",
+    description: "La app pregunta, ordena la información y evita que el usuario rellene todo manualmente.",
+    icon: MessageSquareText
   },
   {
     title: "Contexto por ubicación",
@@ -68,15 +68,15 @@ export function LandingPage() {
                 Prototipo académico listo para demo
               </div>
               <h1 className="mt-6 max-w-3xl font-serif text-4xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-5xl">
-                Evalúa la factibilidad de un proyecto de negocio con una lógica formal, visual y defendible.
+                Conversa con una IA, define tu proyecto y obtén un informe de factibilidad sin llenar un formulario pesado.
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
-                Factibiz transforma datos del proyecto, contexto de ubicación y variables estratégicas en un
-                score final de 0.0 a 10.0, con dashboard ejecutivo, recomendaciones y reporte descargable.
+                Factibiz entrevista al usuario, transforma la conversación en datos estructurados y genera un
+                análisis ejecutivo con score, dashboard, riesgos, recomendaciones e informe descargable.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button onClick={startBlank} className="gap-2">
-                  Comenzar evaluación
+                  Comenzar con IA
                   <ArrowRight className="h-4 w-4" />
                 </Button>
                 <Button variant="secondary" onClick={loadDefaultDemo}>
@@ -107,24 +107,24 @@ export function LandingPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                    Vista conceptual
+                    Flujo principal
                   </p>
                   <h2 className="mt-2 font-serif text-3xl font-semibold text-slate-950 dark:text-slate-50">
-                    Matriz de factibilidad
+                    Entrevista + scoring + informe
                   </h2>
                 </div>
                 <div className="rounded-2xl bg-slate-900 p-3 text-white dark:bg-slate-100 dark:text-slate-950">
-                  <Building2 className="h-5 w-5" />
+                  <Bot className="h-5 w-5" />
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
-                  { name: "SEPTE", value: "25%" },
-                  { name: "Porter", value: "20%" },
-                  { name: "Mercado", value: "20%" },
-                  { name: "Finanzas", value: "15%" },
-                  { name: "FODA", value: "10%" },
-                  { name: "Operación", value: "10%" }
+                  { name: "1. Conversación", value: "IA guía" },
+                  { name: "2. Extracción", value: "Datos estructurados" },
+                  { name: "3. Contexto", value: "Ciudad + mercado" },
+                  { name: "4. Score", value: "0.0 a 10.0" },
+                  { name: "5. Dashboard", value: "Visual y ejecutivo" },
+                  { name: "6. Informe", value: "PDF / impresión" }
                 ].map((item) => (
                   <div key={item.name} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                     <p className="text-sm text-slate-500 dark:text-slate-400">{item.name}</p>

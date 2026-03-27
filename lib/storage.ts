@@ -1,5 +1,5 @@
 import { STORAGE_KEYS } from "@/lib/constants";
-import type { EvaluationSnapshot, ProjectInput, ProjectWeights } from "@/types";
+import type { EvaluationSnapshot, InterviewSession, ProjectInput, ProjectWeights } from "@/types";
 
 type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
 
@@ -41,4 +41,12 @@ export function getStoredEvaluation() {
 
 export function setStoredEvaluation(snapshot: EvaluationSnapshot) {
   writeStorage(STORAGE_KEYS.evaluation, snapshot);
+}
+
+export function getStoredInterview() {
+  return readStorage<InterviewSession | null>(STORAGE_KEYS.interview, null);
+}
+
+export function setStoredInterview(session: InterviewSession) {
+  writeStorage(STORAGE_KEYS.interview, session);
 }

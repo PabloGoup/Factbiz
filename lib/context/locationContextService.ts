@@ -1,7 +1,10 @@
 import type { LocationContext, ProjectInput } from "@/types";
 import { clamp } from "@/lib/utils";
 
-const presetContexts: Record<string, Omit<LocationContext, "country" | "region" | "city" | "key">> = {
+type LocationSignalInput = Pick<ProjectInput, "country" | "region" | "city">;
+type LocationSignalPayload = Omit<LocationContext, "country" | "region" | "city" | "key">;
+
+const presetContexts: Record<string, LocationSignalPayload> = {
   "argentina|ciudad autónoma de buenos aires|buenos aires": {
     tourismLevel: 7,
     commercialFlow: 9,
@@ -90,16 +93,13 @@ function inferMetroBoost(city: string, region: string) {
   return 0;
 }
 
-export function getLocationContext(input: Pick<ProjectInput, "country" | "region" | "city">): LocationContext {
+export function resolveLocationSignals(input: LocationSignalInput): LocationSignalPayload & { key: string } {
   const key = [normalize(input.country), normalize(input.region), normalize(input.city)].join("|");
   const preset = presetContexts[key];
 
   if (preset) {
     return {
       key,
-      country: input.country,
-      region: input.region,
-      city: input.city,
       ...preset
     };
   }
@@ -125,9 +125,6 @@ export function getLocationContext(input: Pick<ProjectInput, "country" | "region
 
   return {
     key,
-    country: input.country,
-    region: input.region,
-    city: input.city,
     tourismLevel,
     commercialFlow,
     competitivePressure,
@@ -139,5 +136,26 @@ export function getLocationContext(input: Pick<ProjectInput, "country" | "region
     narrative:
       "Se aplicó una heurística de mercado por ciudad y país. El análisis asume condiciones urbanas medias, con ajustes por turismo, madurez comercial y facilidad regulatoria.",
     source: "heuristic"
+  };
+}
+
+export function getLocationContext(input: LocationSignalInput): LocationContext {
+  const signals = resolveLocationSignals(input);
+
+  return {
+    key: signals.key,
+    country: input.country,
+    region: input.region,
+    city: input.city,
+    tourismLevel: signals.tourismLevel,
+    commercialFlow: signals.commercialFlow,
+    competitivePressure: signals.competitivePressure,
+    economicStability: signals.economicStability,
+    priceSensitivity: signals.priceSensitivity,
+    regulatoryEase: signals.regulatoryEase,
+    digitalizationLevel: signals.digitalizationLevel,
+    marketAttractiveness: signals.marketAttractiveness,
+    narrative: signals.narrative,
+    source: signals.source
   };
 }

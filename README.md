@@ -6,7 +6,9 @@ Prototipo funcional de una web app académica para evaluar la factibilidad de pr
 
 Factibiz permite:
 
-- cargar datos de un proyecto en un formulario multipaso
+- conversar con una IA que entrevista al usuario y arma el caso paso a paso
+- extraer automáticamente datos estructurados del proyecto a partir del chat
+- usar también un formulario clásico como modo alternativo
 - enriquecer el análisis con contexto automático por ubicación
 - calcular un score final de factibilidad entre `0.0` y `10.0`
 - clasificar el caso como `No factible`, `Factible con riesgos` o `Factible`
@@ -28,9 +30,9 @@ Factibiz permite:
 ## Estructura
 
 - `app/`: rutas principales
-- `components/`: UI, wizard, dashboard, charts e informe
+- `components/`: UI, entrevista IA, wizard, dashboard, charts e informe
 - `lib/scoring/`: motor de scoring desacoplado
-- `lib/ai/`: capa de insights simulados preparada para LLM real
+- `lib/ai/`: entrevista guiada, insights simulados e integración real con LLM
 - `lib/context/`: contexto automático por ubicación
 - `lib/report/`: exportación e impresión
 - `types/`: tipos de dominio
@@ -43,7 +45,7 @@ npm install
 npm run dev
 ```
 
-Luego abre `http://locealhost:3000`.
+Luego abre `http://localhost:3000`.
 
 ## Validación de calidad
 
@@ -79,6 +81,13 @@ npm run build
 
 No requiere variables de entorno para esta versión del prototipo.
 
+Si quieres usar la experiencia conversacional con Gemini real, agrega:
+
+```bash
+GEMINI_API_KEY=tu_api_key
+GEMINI_MODEL=gemini-2.5-flash-lite
+```
+
 ## Informe PDF
 
 La exportación usa una estrategia razonable basada en impresión del navegador:
@@ -95,19 +104,30 @@ Esto deja la solución simple, portable y adecuada para demo académica.
 La lógica actual está en:
 
 - `lib/ai/aiInsights.ts`
+- `lib/ai/gemini.ts`
+- `lib/ai/interview.ts`
+- `app/api/insights/route.ts`
+- `app/api/interview/route.ts`
 
-Hoy usa reglas y plantillas contextuales sobre:
+Hoy soporta:
+
+- insights mock locales
+- insights reales con Gemini
+- entrevista guiada por IA para construir el proyecto
+
+Ambos modos trabajan sobre:
 
 - input del proyecto
 - contexto geográfico
 - resultados del scoring
+- conversación con el usuario
 
 Para conectar un LLM real más adelante:
 
-1. crea un adaptador de proveedor, por ejemplo `lib/ai/providers/openai.ts`
-2. mantén la interfaz de entrada y salida de `generateAiInsights`
-3. reemplaza o complementa la generación mock con una llamada a API
-4. conserva `InsightReport` como contrato estable para el frontend
+1. crea un adaptador de proveedor adicional
+2. mantén `InsightReport` y `InterviewTurnResult` como contratos estables
+3. reutiliza las route handlers como punto único de orquestación
+4. conserva el fallback mock para demo offline o contingencia
 
 ## Cómo conectar datos reales
 
@@ -150,3 +170,5 @@ Los pesos iniciales están en:
 - `lib/constants.ts`
 
 Y pueden editarse desde el paso final del wizard.
+
+La experiencia principal recomendada ahora es la entrevista con IA en `/evaluacion`.
