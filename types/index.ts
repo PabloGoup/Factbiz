@@ -67,7 +67,7 @@ export type LocationContext = {
   digitalizationLevel: number;
   marketAttractiveness: number;
   narrative: string;
-  source: "preset" | "heuristic";
+  source: "preset" | "heuristic" | "grounded";
 };
 
 export type ReportBlockNarrative = {

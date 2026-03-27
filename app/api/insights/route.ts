@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { generateMockAiInsights } from "@/lib/ai/aiInsights";
 import { describeGeminiError, generateGeminiInsights, isGeminiConfigured } from "@/lib/ai/gemini";
+import { getGroundedLocationContext } from "@/lib/context/locationContextResearch";
+import { evaluateProject } from "@/lib/scoring/engine";
 import type { LocationContext, ProjectInput, ScoreBreakdown } from "@/types";
 
 const blockIdSchema = z.enum(["septe", "porter", "foda", "mercado", "finanzas", "operacionLegalidad"]);
@@ -26,6 +28,8 @@ const requestSchema = z.object({
     city: z.string(),
     narrative: z.string()
   }).passthrough(),
+  strict: z.boolean().optional(),
+  useGroundedContext: z.boolean().optional(),
   scoreBreakdown: z.object({
     finalScore: z.number(),
     classification: z.enum(["No factible", "Factible con riesgos", "Factible"]),
@@ -69,9 +73,20 @@ export async function POST(request: Request) {
       input: ProjectInput;
       context: LocationContext;
       scoreBreakdown: ScoreBreakdown;
+      strict?: boolean;
+      useGroundedContext?: boolean;
     };
 
     if (!isGeminiConfigured()) {
+      if (payload.strict) {
+        return NextResponse.json(
+          {
+            error: "Gemini no está configurado en el servidor. El informe final requiere IA activa."
+          },
+          { status: 503 }
+        );
+      }
+
       const fallbackInsights = generateMockAiInsights(payload.input, payload.context, payload.scoreBreakdown);
 
       return NextResponse.json({
@@ -84,13 +99,39 @@ export async function POST(request: Request) {
     }
 
     try {
-      const insights = await generateGeminiInsights(payload.input, payload.context, payload.scoreBreakdown);
+      let context = payload.context;
+      let scoreBreakdown = payload.scoreBreakdown;
+
+      if (payload.useGroundedContext) {
+        context = await getGroundedLocationContext({
+          country: payload.input.country,
+          region: payload.input.region,
+          city: payload.input.city,
+          businessType: payload.input.businessType,
+          sector: payload.input.sector,
+          targetAudience: payload.input.targetAudience
+        });
+        scoreBreakdown = evaluateProject(payload.input, context, payload.scoreBreakdown.weights);
+      }
+
+      const insights = await generateGeminiInsights(payload.input, context, scoreBreakdown);
 
       return NextResponse.json({
         insights,
+        context,
+        scoreBreakdown,
         mode: "gemini"
       });
     } catch (providerError) {
+      if (payload.strict) {
+        return NextResponse.json(
+          {
+            error: describeGeminiError(providerError)
+          },
+          { status: 503 }
+        );
+      }
+
       const fallbackInsights = generateMockAiInsights(payload.input, payload.context, payload.scoreBreakdown);
 
       return NextResponse.json({

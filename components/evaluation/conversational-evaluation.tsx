@@ -91,20 +91,27 @@ async function upgradeSnapshotInsights(snapshot: EvaluationSnapshot) {
     body: JSON.stringify({
       input: snapshot.input,
       context: snapshot.context,
-      scoreBreakdown: snapshot.scoreBreakdown
+      scoreBreakdown: snapshot.scoreBreakdown,
+      strict: true,
+      useGroundedContext: true
     })
   });
 
   if (!response.ok) {
-    return snapshot;
+    const payload = (await response.json()) as { error?: string };
+    throw new Error(payload.error ?? "No fue posible generar el informe con Gemini.");
   }
 
   const payload = (await response.json()) as {
     insights: EvaluationSnapshot["insights"];
+    context?: EvaluationSnapshot["context"];
+    scoreBreakdown?: EvaluationSnapshot["scoreBreakdown"];
   };
 
   return {
     ...snapshot,
+    context: payload.context ?? snapshot.context,
+    scoreBreakdown: payload.scoreBreakdown ?? snapshot.scoreBreakdown,
     insights: payload.insights
   };
 }

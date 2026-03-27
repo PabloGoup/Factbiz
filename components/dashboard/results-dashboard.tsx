@@ -54,7 +54,9 @@ export function ResultsDashboard() {
         body: JSON.stringify({
           input: currentSnapshot.input,
           context: currentSnapshot.context,
-          scoreBreakdown: currentSnapshot.scoreBreakdown
+          scoreBreakdown: currentSnapshot.scoreBreakdown,
+          strict: true,
+          useGroundedContext: true
         })
       });
 
@@ -65,10 +67,14 @@ export function ResultsDashboard() {
 
       const payload = (await response.json()) as {
         insights: EvaluationSnapshot["insights"];
+        context?: EvaluationSnapshot["context"];
+        scoreBreakdown?: EvaluationSnapshot["scoreBreakdown"];
         mode: "mock" | "gemini";
       };
       const nextSnapshot = {
         ...currentSnapshot,
+        context: payload.context ?? currentSnapshot.context,
+        scoreBreakdown: payload.scoreBreakdown ?? currentSnapshot.scoreBreakdown,
         insights: payload.insights
       };
 
