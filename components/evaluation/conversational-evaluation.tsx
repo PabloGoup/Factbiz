@@ -332,7 +332,19 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
           <Link href="/evaluacion?modo=formulario">
             <Button variant="secondary">Usar formulario clásico</Button>
           </Link>
-          <Button variant="secondary" onClick={() => setSession(createWelcomeSession())}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const freshSession = createWelcomeSession();
+              setSession(freshSession);
+              setStoredInterview(freshSession);
+              setMessage("");
+              setError(null);
+              setLoading(false);
+              setReportLoading(false);
+              setResearchLoading(false);
+            }}
+          >
             <RefreshCcw className="mr-2 h-4 w-4" />
             Reiniciar entrevista
           </Button>

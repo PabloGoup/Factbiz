@@ -43,7 +43,7 @@ const researchFindingSchema = z.object({
 
 const scoringInferenceSchema = z.object({
   variable: z.string().min(3),
-  value: z.union([z.string(), z.number()]),
+  value: z.string().min(1),
   rationale: z.string().min(16),
   sourceTitles: z.array(z.string()).min(1).max(3)
 });
@@ -249,6 +249,14 @@ function memoExcerpt(text: string, index: number, fallback: string) {
   return paragraph.length >= 80 ? paragraph : `${paragraph} ${fallback}`.trim();
 }
 
+function ensureMinText(text: string | undefined, minimum: number, fallback: string) {
+  const normalized = (text ?? "").trim();
+  if (normalized.length >= minimum) return normalized;
+  const merged = `${normalized} ${fallback}`.trim();
+  if (merged.length >= minimum) return merged;
+  return `${merged} ${fallback}`.trim();
+}
+
 async function repairResearchPayload<T>(
   client: GoogleGenAI,
   model: string,
@@ -380,11 +388,17 @@ function normalizeResearchDossier(
   const sources = [...groundedSources, ...base.sources]
     .filter((source) => source.title && source.url)
     .reduce<Array<{ title: string; url: string; note: string }>>((acc, source) => {
+      const normalizedTitle = source.title.trim().length >= 8 ? source.title.trim() : `Fuente sobre ${source.note.trim().slice(0, 40)}`;
+      const normalizedNote =
+        source.note.trim().length >= 12
+          ? source.note.trim()
+          : "Referencia usada por Gemini durante la investigación académica del caso.";
+
       if (acc.some((item) => item.url === source.url)) return acc;
       acc.push({
-        title: source.title.trim(),
+        title: normalizedTitle,
         url: source.url.trim(),
-        note: source.note.trim()
+        note: normalizedNote
       });
       return acc;
     }, [])
@@ -428,10 +442,21 @@ function normalizeResearchDossier(
     },
     findings: base.findings.slice(0, 12).map((finding) => ({
       ...finding,
-      title: finding.title.trim(),
-      summary: finding.summary.trim(),
-      evidence: finding.evidence.trim(),
-      sourceTitles: clampSourceTitles(finding.sourceTitles)
+      title: ensureMinText(finding.title, 8, "Hallazgo relevante del caso"),
+      summary: ensureMinText(
+        finding.summary,
+        20,
+        "La investigación sugiere una implicancia concreta para la factibilidad del proyecto."
+      ),
+      evidence: ensureMinText(
+        finding.evidence,
+        20,
+        "Esta señal debe considerarse en la evaluación estratégica, comercial y operativa."
+      ),
+      sourceTitles:
+        clampSourceTitles(finding.sourceTitles).length > 0
+          ? clampSourceTitles(finding.sourceTitles)
+          : ["Investigación grounded de Gemini"]
     })),
     sources,
     scoringInferences: base.scoringInferences.slice(0, 20).map((inference) => ({
@@ -583,49 +608,49 @@ function fallbackScoringBundle(inputDraft: ProjectInput, query: string) {
     scoringInferences: [
       {
         variable: "competitivePressure",
-        value: 7,
+        value: "7",
         rationale: "La investigación preliminar sugiere una rivalidad relevante en el mercado objetivo.",
         sourceTitles: ["Investigación grounded de Gemini"]
       },
       {
         variable: "marketAttractiveness",
-        value: 6,
+        value: "6",
         rationale: "El mercado parece defendible, pero todavía condicionado por ejecución, posicionamiento y entrada selectiva.",
         sourceTitles: ["Investigación grounded de Gemini"]
       },
       {
         variable: "regulatoryEase",
-        value: 5,
+        value: "5",
         rationale: "La apertura exige revisar barreras y permisos, por lo que la facilidad regulatoria no puede asumirse alta.",
         sourceTitles: ["Investigación grounded de Gemini"]
       },
       {
         variable: "expectedDemand",
-        value: 6,
+        value: "6",
         rationale: "La demanda potencial luce razonable, aunque todavía no está validada con evidencia comercial directa del proyecto.",
         sourceTitles: ["Investigación grounded de Gemini"]
       },
       {
         variable: "substituteThreat",
-        value: isFood ? 8 : 6,
+        value: String(isFood ? 8 : 6),
         rationale: "Existen alternativas de consumo o formatos sustitutos que presionan la captura de demanda inicial.",
         sourceTitles: ["Investigación grounded de Gemini"]
       },
       {
         variable: "entryBarriers",
-        value: 5,
+        value: "5",
         rationale: "La entrada al mercado no es imposible, pero sí requiere capital, ubicación, permisos y ejecución disciplinada.",
         sourceTitles: ["Investigación grounded de Gemini"]
       },
       {
         variable: "customerPower",
-        value: 7,
+        value: "7",
         rationale: "El cliente tiene capacidad de comparar opciones, precios y conveniencia antes de elegir.",
         sourceTitles: ["Investigación grounded de Gemini"]
       },
       {
         variable: "differentiationLevel",
-        value: 6,
+        value: "6",
         rationale: "La diferenciación es plausible, pero debe traducirse en una propuesta realmente visible para el mercado objetivo.",
         sourceTitles: ["Investigación grounded de Gemini"]
       }
@@ -976,7 +1001,7 @@ ${researchContext}`,
             type: "OBJECT",
             properties: {
               variable: { type: "STRING" },
-              value: { anyOf: [{ type: "STRING" }, { type: "NUMBER" }] },
+              value: { type: "STRING" },
               rationale: { type: "STRING" },
               sourceTitles: { type: "ARRAY", items: { type: "STRING" } }
             },

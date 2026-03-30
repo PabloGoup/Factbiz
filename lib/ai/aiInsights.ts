@@ -146,6 +146,642 @@ function firstSentences(text: string, maxSentences = 2) {
     .trim();
 }
 
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function compactText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function isGenericResearchSentence(value: string) {
+  const normalized = normalizeText(value);
+
+  return (
+    normalized.startsWith("a continuacion se presenta una investigacion academica") ||
+    normalized.startsWith("la investigacion sugiere que el desempeno del proyecto depende") ||
+    normalized.startsWith("el caso muestra fortalezas de concepto") ||
+    normalized.startsWith("la consistencia entre publico objetivo") ||
+    normalized.startsWith("la competencia del caso") ||
+    normalized.startsWith("en materia legal y de barreras de entrada") ||
+    normalized.startsWith("la conclusion preliminar") ||
+    normalized === "la investigacion sugiere que el desempeno del proyecto depende del contexto competitivo, del consumo local y del marco regulatorio del mercado destino."
+  );
+}
+
+function cleanResearchSentence(value: string) {
+  return compactText(
+    value
+      .replace(/^A continuación, se presenta una investigación académica[^:]*:\s*/i, "")
+      .replace(/^La investigación sugiere que el desempeño del proyecto depende[^.]*\.\s*/i, "")
+  );
+}
+
+type FactorResearchConfig = {
+  sections: Array<keyof ResearchDossier["sections"]>;
+  keywords: string[];
+  variables: string[];
+  action: string;
+  goodImpact: string;
+  mediumImpact: string;
+  lowImpact: string;
+};
+
+function factorConfig(blockId: BlockId, factorLabel: string): FactorResearchConfig {
+  const label = normalizeText(factorLabel);
+
+  switch (blockId) {
+    case "septe":
+      if (label.includes("social")) {
+        return {
+          sections: ["macroMicro", "marketStudy"],
+          keywords: ["social", "consumo", "demanda", "hogares", "habitos", "segmento", "cliente"],
+          variables: ["customerFit", "consumerBehavior", "marketAttractiveness"],
+          action: "ajustar propuesta, surtido y comunicación al patrón de consumo dominante",
+          goodImpact: "refuerza el encaje cultural del proyecto y facilita una entrada comercial defendible.",
+          mediumImpact: "todavía exige validar mejor hábitos de compra y sensibilidad del público objetivo.",
+          lowImpact: "debilita el encaje con la demanda local y obliga a replantear público, formato o propuesta."
+        };
+      }
+      if (label.includes("econom")) {
+        return {
+          sections: ["macroMicro", "marketStudy", "conclusion"],
+          keywords: ["econom", "inflacion", "ingreso", "precio", "consumo", "poder adquisitivo", "mercado"],
+          variables: ["marketAttractiveness", "expectedDemand", "averageTicket"],
+          action: "recalibrar ticket, costos y escenario de ventas al contexto de consumo",
+          goodImpact: "favorece la viabilidad comercial y mejora la defensa económica del caso.",
+          mediumImpact: "permite avanzar, pero bajo supuestos financieros prudentes y seguimiento cercano.",
+          lowImpact: "presiona la rentabilidad y exige un rediseño del posicionamiento económico."
+        };
+      }
+      if (label.includes("politico") || label.includes("legal")) {
+        return {
+          sections: ["macroMicro", "legalBarriers"],
+          keywords: ["regulator", "legal", "permiso", "patente", "habilitacion", "sanitario", "normativa"],
+          variables: ["regulatoryEase", "legalDifficulty", "permitComplexity"],
+          action: "cerrar la hoja de ruta regulatoria, sanitaria y comercial antes de abrir",
+          goodImpact: "reduce fricción de entrada y acorta el camino de implementación.",
+          mediumImpact: "no bloquea el proyecto, pero sí demanda planificación jurídica y operativa fina.",
+          lowImpact: "compromete el calendario de apertura y aumenta el riesgo de sobrecostos regulatorios."
+        };
+      }
+      if (label.includes("tecnolog")) {
+        return {
+          sections: ["macroMicro", "competitiveAdvantage", "marketStudy"],
+          keywords: ["digital", "tecnolog", "delivery", "canal", "plataforma", "medios de pago"],
+          variables: ["digitalizationLevel", "differentiationLevel"],
+          action: "convertir la ventaja digital en adquisición, operación y repetición de clientes",
+          goodImpact: "mejora la capacidad de captación y operación del proyecto en el mercado objetivo.",
+          mediumImpact: "exige fortalecer canales digitales y control operacional para volverse ventaja real.",
+          lowImpact: "deja al proyecto rezagado frente a competidores con mejor ejecución digital."
+        };
+      }
+      if (label.includes("ecolog")) {
+        return {
+          sections: ["macroMicro", "competitiveAdvantage", "conclusion"],
+          keywords: ["sosten", "ecolog", "ambient", "impacto", "residuo", "eficiencia"],
+          variables: ["sustainabilityReadiness"],
+          action: "traducir sostenibilidad a procesos, relato de marca y control de costos",
+          goodImpact: "fortalece reputación y coherencia de marca sin tensionar la operación.",
+          mediumImpact: "aporta valor reputacional, pero todavía no se traduce en ventaja suficientemente visible.",
+          lowImpact: "deja un frente débil en consistencia operativa y diferenciación sostenible."
+        };
+      }
+      return {
+        sections: ["macroMicro", "marketStudy", "promotionPlan"],
+        keywords: ["marketing", "consumo", "cliente", "marca", "comportamiento", "promocion"],
+        variables: ["segmentationClarity", "customerFit", "consumerBehavior"],
+        action: "afinar mensaje, segmentación y propuesta de valor frente al comportamiento del cliente",
+        goodImpact: "favorece conversión y recordación de marca en el segmento objetivo.",
+        mediumImpact: "necesita validar mejor propuesta, narrativa comercial y comportamiento de compra.",
+        lowImpact: "dificulta la captación del cliente y debilita la tesis comercial del proyecto."
+      };
+
+    case "porter":
+      if (label.includes("rivalidad")) {
+        return {
+          sections: ["competitionStudy", "marketStudy"],
+          keywords: ["rivalidad", "compet", "oferta", "saturacion", "benchmark", "precio"],
+          variables: ["competitivePressure", "competitorCount", "differentiationLevel"],
+          action: "definir una diferenciación concreta frente a competidores existentes",
+          goodImpact: "permite defender cuota inicial y reduce presión directa de competidores.",
+          mediumImpact: "mantiene el caso abierto, pero obliga a competir con foco y disciplina comercial.",
+          lowImpact: "erosiona la entrada porque el mercado ya está demasiado presionado por alternativas similares."
+        };
+      }
+      if (label.includes("clientes")) {
+        return {
+          sections: ["competitionStudy", "marketStudy"],
+          keywords: ["cliente", "precio", "sensibilidad", "promocion", "eleccion", "demanda"],
+          variables: ["customerPower", "priceSensitivity", "customerFit"],
+          action: "alinear precio, propuesta y experiencia al poder de elección del cliente",
+          goodImpact: "permite capturar demanda sin deteriorar en exceso el margen.",
+          mediumImpact: "exige cuidar precio, conveniencia y experiencia para sostener conversión.",
+          lowImpact: "vuelve muy frágil la captura de demanda frente a clientes con alta capacidad de comparación."
+        };
+      }
+      if (label.includes("proveedor")) {
+        return {
+          sections: ["competitionStudy", "operationAndHR"],
+          keywords: ["proveedor", "abastecimiento", "insumo", "costos", "cadena de suministro"],
+          variables: ["supplierDependency", "variableCostRate", "fixedCosts"],
+          action: "diversificar compras y asegurar abastecimiento con control de margen",
+          goodImpact: "da flexibilidad operativa y baja exposición a sobrecostos de suministro.",
+          mediumImpact: "obliga a profesionalizar compras y negociación para proteger el margen.",
+          lowImpact: "sube el riesgo operativo y financiero por dependencia o volatilidad de insumos."
+        };
+      }
+      if (label.includes("sustituto")) {
+        return {
+          sections: ["competitionStudy", "marketStudy"],
+          keywords: ["sustituto", "alternativa", "delivery", "kiosco", "casino", "food truck", "supermercado"],
+          variables: ["substituteThreat", "customerPower", "averageTicket"],
+          action: "hacer más conveniente o diferenciada la propuesta frente a alternativas de reemplazo",
+          goodImpact: "reduce fuga de demanda hacia soluciones alternativas y mejora la captura de valor.",
+          mediumImpact: "todavía obliga a reforzar conveniencia, propuesta o experiencia frente a opciones sustitutas.",
+          lowImpact: "presiona fuerte la demanda porque el cliente puede reemplazar fácilmente la oferta."
+        };
+      }
+      return {
+        sections: ["competitionStudy", "legalBarriers"],
+        keywords: ["entrante", "entrada", "barrera", "ubicacion", "capital", "permiso", "habilitacion"],
+        variables: ["newEntrantsThreat", "entryBarriers", "permitComplexity"],
+        action: "asegurar barreras blandas de entrada mediante ubicación, marca y ejecución temprana",
+        goodImpact: "protege mejor la posición inicial y modera la entrada de nuevos competidores.",
+        mediumImpact: "deja espacio para avanzar, pero sin una barrera suficientemente fuerte para escalar con comodidad.",
+        lowImpact: "expone al proyecto a imitadores y a una presión de entrada que reduce defensa competitiva."
+      };
+
+    case "foda":
+      if (label.includes("fortaleza")) {
+        return {
+          sections: ["foda", "competitiveAdvantage"],
+          keywords: ["fortaleza", "capacidad", "ventaja", "propuesta", "marca", "operacion"],
+          variables: ["differentiationLevel", "customerFit"],
+          action: "convertir la fortaleza detectada en una ventaja operacional medible",
+          goodImpact: "entrega una base interna clara para defender la tesis del negocio.",
+          mediumImpact: "aporta valor, pero todavía necesita aterrizarse en ejecución y control.",
+          lowImpact: "sigue siendo débil o poco demostrable para sostener la propuesta."
+        };
+      }
+      if (label.includes("oportunidad")) {
+        return {
+          sections: ["foda", "marketStudy", "macroMicro"],
+          keywords: ["oportunidad", "demanda", "nicho", "crecimiento", "espacio", "tendencia"],
+          variables: ["marketAttractiveness", "expectedDemand", "marketSize"],
+          action: "capturar la oportunidad con una entrada selectiva y una propuesta enfocada",
+          goodImpact: "amplía el espacio de crecimiento y justifica avanzar con una prueba comercial.",
+          mediumImpact: "es real, pero aún depende de ejecución y foco para convertirse en tracción.",
+          lowImpact: "sigue siendo insuficiente o demasiado difusa para sostener la apertura."
+        };
+      }
+      if (label.includes("debilidad")) {
+        return {
+          sections: ["foda", "operationAndHR", "conclusion"],
+          keywords: ["debilidad", "brecha", "falta", "capacidad", "equipo", "estructura"],
+          variables: ["operationalComplexity", "personnelRequired", "fixedCosts"],
+          action: "cerrar la brecha interna con procesos, estructura y foco operativo",
+          goodImpact: "ya no compromete seriamente la tesis del proyecto si se gestiona con disciplina.",
+          mediumImpact: "sigue presente y debe mitigarse antes de escalar el caso.",
+          lowImpact: "presiona directamente la factibilidad porque revela una fragilidad interna relevante."
+        };
+      }
+      return {
+        sections: ["foda", "macroMicro", "competitionStudy"],
+        keywords: ["amenaza", "riesgo", "competencia", "regulatorio", "mercado", "entorno"],
+        variables: ["competitivePressure", "regulatoryEase", "priceSensitivity"],
+        action: "tratar la amenaza con mitigaciones explícitas antes de comprometer recursos mayores",
+        goodImpact: "queda contenida y no domina la decisión final si se monitorea bien.",
+        mediumImpact: "todavía condiciona el proyecto y obliga a una ruta de mitigación concreta.",
+        lowImpact: "presiona la apertura porque la amenaza externa sigue siendo material."
+      };
+
+    case "mercado":
+      if (label.includes("tamano")) {
+        return {
+          sections: ["marketStudy", "macroMicro"],
+          keywords: ["tamano", "mercado", "escala", "demanda", "industria", "consumo"],
+          variables: ["marketSize", "marketAttractiveness"],
+          action: "dimensionar mejor el tamaño útil del mercado antes de escalar",
+          goodImpact: "apoya la tesis de entrada porque existe profundidad suficiente para probar y crecer.",
+          mediumImpact: "permite un piloto, pero exige acotar bien el nicho y el alcance inicial.",
+          lowImpact: "reduce el atractivo comercial porque el mercado útil luce insuficiente o poco defendible."
+        };
+      }
+      if (label.includes("demanda")) {
+        return {
+          sections: ["marketStudy", "conclusion"],
+          keywords: ["demanda", "traccion", "consumo", "frecuencia", "captacion"],
+          variables: ["expectedDemand", "customerFit", "footTraffic"],
+          action: "validar la demanda con prueba comercial, entrevistas o benchmark local",
+          goodImpact: "mejora la probabilidad de conversión y da sustento al piloto.",
+          mediumImpact: "todavía depende de validación comercial real antes de escalar.",
+          lowImpact: "deja al caso sin una base robusta de demanda para justificar apertura."
+        };
+      }
+      if (label.includes("segmentacion")) {
+        return {
+          sections: ["marketStudy", "promotionPlan"],
+          keywords: ["segmentacion", "nicho", "publico", "perfil", "target", "cliente"],
+          variables: ["segmentationClarity", "customerFit"],
+          action: "hacer más específica la segmentación y priorizar el buyer principal",
+          goodImpact: "mejora enfoque comercial y reduce dispersión de recursos.",
+          mediumImpact: "todavía pide mayor precisión en el segmento y en su propuesta de valor.",
+          lowImpact: "debilita la ejecución comercial porque el target sigue siendo ambiguo."
+        };
+      }
+      if (label.includes("cliente")) {
+        return {
+          sections: ["marketStudy", "promotionPlan"],
+          keywords: ["cliente", "buyer", "universitario", "turista", "hogar", "publico"],
+          variables: ["customerFit", "consumerBehavior"],
+          action: "alinear propuesta, ticket y comunicación al cliente dominante",
+          goodImpact: "refuerza el encaje del proyecto con el público objetivo.",
+          mediumImpact: "exige afinar mejor propuesta y validación del cliente principal.",
+          lowImpact: "cuestiona el encaje producto-mercado del proyecto."
+        };
+      }
+      if (label.includes("flujo")) {
+        return {
+          sections: ["marketStudy", "macroMicro"],
+          keywords: ["flujo", "trafico", "ubicacion", "paso", "zona", "afluencia"],
+          variables: ["footTraffic", "commercialFlow"],
+          action: "asegurar una ubicación o canal con flujo suficientemente defendible",
+          goodImpact: "mejora exposición comercial y velocidad de validación del negocio.",
+          mediumImpact: "permite operar, pero exige una estrategia de captación más activa.",
+          lowImpact: "resta visibilidad y vuelve más costosa la captación de demanda."
+        };
+      }
+      if (label.includes("turismo")) {
+        return {
+          sections: ["marketStudy", "macroMicro"],
+          keywords: ["turismo", "visitante", "temporada", "viajero"],
+          variables: ["tourismLevel", "marketAttractiveness"],
+          action: "definir si el negocio depende o no de demanda turística y ajustar su estacionalidad",
+          goodImpact: "abre una fuente adicional de demanda y fortalece el atractivo del caso.",
+          mediumImpact: "aporta parcialmente, pero no debe sobreestimarse en la tesis comercial.",
+          lowImpact: "no ofrece una base suficiente de demanda turística para sostener el proyecto."
+        };
+      }
+      return {
+        sections: ["marketStudy", "macroMicro", "promotionPlan"],
+        keywords: ["tendencia", "consumo", "habito", "digital", "preferencia", "comportamiento"],
+        variables: ["consumerBehavior", "digitalizationLevel"],
+        action: "alinear la propuesta a la tendencia de consumo dominante del mercado destino",
+        goodImpact: "mejora la afinidad del proyecto con la evolución del mercado.",
+        mediumImpact: "todavía requiere traducir mejor la tendencia observada a una oferta concreta.",
+        lowImpact: "deja al negocio desalineado con el patrón de consumo actual."
+      };
+
+    case "finanzas":
+      if (label.includes("inversion")) {
+        return {
+          sections: ["conclusion", "marketStudy"],
+          keywords: ["inversion", "capex", "capital", "entrada", "desembolso"],
+          variables: ["initialInvestment"],
+          action: "recalibrar la inversión inicial a una etapa piloto más manejable",
+          goodImpact: "mejora flexibilidad financiera y facilita validar sin sobreexposición temprana.",
+          mediumImpact: "es manejable, pero necesita disciplina en alcance y secuencia de inversión.",
+          lowImpact: "compromete la entrada porque exige demasiado capital para el nivel de certeza actual."
+        };
+      }
+      if (label.includes("costos fijos")) {
+        return {
+          sections: ["operationAndHR", "conclusion"],
+          keywords: ["costos fijos", "estructura", "nomina", "arriendo", "gasto fijo"],
+          variables: ["fixedCosts", "personnelRequired"],
+          action: "achicar estructura fija para proteger caja y punto de equilibrio",
+          goodImpact: "favorece resiliencia del proyecto y reduce presión temprana sobre ventas.",
+          mediumImpact: "todavía exige control estricto de estructura antes de escalar.",
+          lowImpact: "presiona la caja y eleva el umbral mínimo de ventas para operar."
+        };
+      }
+      if (label.includes("costos variables")) {
+        return {
+          sections: ["operationAndHR", "competitionStudy"],
+          keywords: ["costos variables", "insumos", "margen", "compra", "abastecimiento"],
+          variables: ["variableCostRate", "supplierDependency"],
+          action: "mejorar compras, productividad y mezcla para proteger margen variable",
+          goodImpact: "da espacio para sostener margen aun bajo presión comercial.",
+          mediumImpact: "es viable, pero debe monitorearse para no erosionar rentabilidad.",
+          lowImpact: "deteriora el margen unitario y reduce la viabilidad del modelo."
+        };
+      }
+      if (label.includes("ticket")) {
+        return {
+          sections: ["marketStudy", "promotionPlan", "competitionStudy"],
+          keywords: ["ticket", "precio", "combo", "promocion", "valor percibido"],
+          variables: ["averageTicket", "priceSensitivity"],
+          action: "ajustar ticket al posicionamiento y a la sensibilidad real del cliente",
+          goodImpact: "ayuda a capturar valor sin romper el encaje comercial.",
+          mediumImpact: "aún necesita validarse contra elasticidad y benchmarking competitivo.",
+          lowImpact: "queda desalineado con el mercado y tensiona conversión o margen."
+        };
+      }
+      if (label.includes("ventas")) {
+        return {
+          sections: ["marketStudy", "conclusion"],
+          keywords: ["ventas", "proyeccion", "facturacion", "ingresos", "traccion"],
+          variables: ["monthlySalesProjection", "expectedDemand"],
+          action: "volver más conservadora la proyección de ventas y validarla en terreno",
+          goodImpact: "sostiene razonablemente la tesis económica del proyecto.",
+          mediumImpact: "sirve como hipótesis, pero no como certeza sin validación comercial real.",
+          lowImpact: "deja el caso sin una proyección creíble para justificar la apertura."
+        };
+      }
+      if (label.includes("margen")) {
+        return {
+          sections: ["competitionStudy", "conclusion"],
+          keywords: ["margen", "rentabilidad", "precio", "costo", "unit economics"],
+          variables: ["expectedMarginPercent", "variableCostRate"],
+          action: "revisar precios, costos y mix para asegurar margen defendible",
+          goodImpact: "mejora la sostenibilidad financiera del piloto y de una posible expansión.",
+          mediumImpact: "permite avanzar, pero con disciplina estricta sobre unit economics.",
+          lowImpact: "pone en duda la rentabilidad del proyecto en su configuración actual."
+        };
+      }
+      return {
+        sections: ["conclusion", "marketStudy"],
+        keywords: ["equilibrio", "break-even", "punto de equilibrio", "ventas", "costos"],
+        variables: ["fixedCosts", "monthlySalesProjection", "expectedMarginPercent"],
+        action: "llevar el punto de equilibrio a una zona alcanzable bajo escenario conservador",
+        goodImpact: "deja una ruta financiera más controlable para validar el negocio.",
+        mediumImpact: "todavía requiere disciplina para alcanzar el umbral de equilibrio.",
+        lowImpact: "expone al proyecto a una operación prolongada sin equilibrio económico claro."
+      };
+
+    case "operacionLegalidad":
+      if (label.includes("complejidad operativa")) {
+        return {
+          sections: ["operationAndHR", "conclusion"],
+          keywords: ["operativa", "proceso", "estandarizacion", "ejecucion", "control"],
+          variables: ["operationalComplexity"],
+          action: "simplificar procesos y secuencias críticas antes de abrir",
+          goodImpact: "facilita la ejecución inicial y mejora control del piloto.",
+          mediumImpact: "todavía exige ordenar procesos y responsables para operar bien.",
+          lowImpact: "dificulta una implementación estable y eleva riesgo de falla operativa."
+        };
+      }
+      if (label.includes("personal")) {
+        return {
+          sections: ["operationAndHR", "conclusion"],
+          keywords: ["personal", "equipo", "dotacion", "rrhh", "retencion", "talento"],
+          variables: ["personnelRequired", "fixedCosts"],
+          action: "dimensionar el equipo mínimo viable y reforzar retención/capacitación",
+          goodImpact: "hace más manejable la operación y protege consistencia de servicio.",
+          mediumImpact: "sigue pidiendo una estructura humana cuidadosa para no sobredimensionar el arranque.",
+          lowImpact: "sube el riesgo operativo y de costos por requerimientos de personal difíciles de sostener."
+        };
+      }
+      if (label.includes("logistica")) {
+        return {
+          sections: ["operationAndHR", "competitionStudy"],
+          keywords: ["logistica", "despacho", "distribucion", "cadena", "coordinacion"],
+          variables: ["logisticsComplexity", "commercialFlow"],
+          action: "cerrar una logística simple y controlable antes de ampliar alcance",
+          goodImpact: "mejora cumplimiento y reduce fricciones de servicio.",
+          mediumImpact: "todavía exige coordinación y prueba operativa antes de escalar.",
+          lowImpact: "puede romper promesa de servicio y deteriorar experiencia del cliente."
+        };
+      }
+      if (label.includes("proveedor")) {
+        return {
+          sections: ["operationAndHR", "competitionStudy"],
+          keywords: ["proveedor", "abastecimiento", "suministro", "insumo"],
+          variables: ["supplierDependency", "variableCostRate"],
+          action: "construir una base de proveedores menos dependiente y más predecible",
+          goodImpact: "aumenta continuidad operativa y reduce exposición a quiebres de suministro.",
+          mediumImpact: "permite operar, pero todavía exige respaldo y control de compras.",
+          lowImpact: "amenaza continuidad, costos y calidad por alta dependencia de abastecimiento."
+        };
+      }
+      if (label.includes("permiso")) {
+        return {
+          sections: ["legalBarriers", "operationAndHR"],
+          keywords: ["permiso", "habilitacion", "patente", "sanitario", "licencia"],
+          variables: ["permitComplexity", "regulatoryEase"],
+          action: "cerrar el checklist de permisos y responsables antes de invertir más capital",
+          goodImpact: "aclara el camino de apertura y reduce riesgo de atrasos evitables.",
+          mediumImpact: "demanda gestión documental y tiempos realistas para no desordenar la entrada.",
+          lowImpact: "puede frenar o encarecer la apertura por incertidumbre regulatoria."
+        };
+      }
+      if (label.includes("barrera")) {
+        return {
+          sections: ["legalBarriers", "competitionStudy"],
+          keywords: ["barrera", "entrada", "capital", "normativa", "ubicacion"],
+          variables: ["entryBarriers", "newEntrantsThreat"],
+          action: "entender bien barreras de entrada y usarlas a favor del diseño del proyecto",
+          goodImpact: "protege mejor la posición una vez abierto el negocio.",
+          mediumImpact: "exige estrategia clara para no quedar atrapado entre barreras y competencia.",
+          lowImpact: "vuelve más difícil o costosa la entrada en el mercado objetivo."
+        };
+      }
+      return {
+        sections: ["legalBarriers", "operationAndHR"],
+        keywords: ["apertura", "legal", "sanitaria", "comercial", "habilitacion"],
+        variables: ["legalDifficulty", "permitComplexity", "regulatoryEase"],
+        action: "diseñar una ruta de apertura legal, sanitaria y comercial con hitos verificables",
+        goodImpact: "reduce incertidumbre de implementación y facilita pasar de idea a operación.",
+        mediumImpact: "sigue requiriendo coordinación legal y operativa antes de abrir.",
+        lowImpact: "compromete directamente la factibilidad por trabas de habilitación o cumplimiento."
+      };
+  }
+}
+
+function excerptByKeywords(text: string, keywords: string[]) {
+  const sentences = text
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => cleanResearchSentence(sentence))
+    .filter(Boolean);
+
+  const normalizedKeywords = keywords.map(normalizeText);
+  const scored = sentences
+    .map((sentence) => ({
+      sentence,
+      score: normalizedKeywords.reduce(
+        (total, keyword) => total + (normalizeText(sentence).includes(keyword) ? 1 : 0),
+        0
+      )
+    }))
+    .filter((item) => !isGenericResearchSentence(item.sentence))
+    .sort((left, right) => right.score - left.score);
+
+  const matched = scored.find((item) => item.score > 0)?.sentence;
+  const fallback = scored.find((item) => item.score === 0)?.sentence;
+
+  return matched ?? fallback ?? "";
+}
+
+function relevantFinding(blockId: BlockId, factorLabel: string, research: ResearchDossier) {
+  const config = factorConfig(blockId, factorLabel);
+  const keywords = config.keywords.map(normalizeText);
+
+  return research.findings
+    .filter((finding) => config.sections.includes(finding.section))
+    .map((finding) => {
+      const haystack = normalizeText(`${finding.title} ${finding.summary} ${finding.evidence}`);
+      const score = keywords.reduce((total, keyword) => total + (haystack.includes(keyword) ? 1 : 0), 0);
+
+      return { finding, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score)[0]?.finding;
+}
+
+function relevantInference(blockId: BlockId, factorLabel: string, research: ResearchDossier) {
+  const config = factorConfig(blockId, factorLabel);
+  const keywords = config.keywords.map(normalizeText);
+
+  return research.scoringInferences.find((inference) => {
+    const variable = normalizeText(inference.variable);
+    const rationale = normalizeText(inference.rationale);
+    return (
+      config.variables.some((item) => variable.includes(normalizeText(item))) ||
+      keywords.some((keyword) => rationale.includes(keyword))
+    );
+  });
+}
+
+function assessmentFromResearch(
+  blockId: BlockId,
+  factor: BlockScore["factors"][number],
+  research: ResearchDossier
+) {
+  const config = factorConfig(blockId, factor.label);
+  const sectionText = config.sections
+    .map((section) => research.sections[section])
+    .filter(Boolean)
+    .join(" ");
+  const finding = relevantFinding(blockId, factor.label, research);
+  const inference = relevantInference(blockId, factor.label, research);
+
+  const summary = finding?.summary ? cleanResearchSentence(firstSentences(finding.summary, 1)) : "";
+  const evidence = finding?.evidence ? cleanResearchSentence(firstSentences(finding.evidence, 1)) : "";
+  const rationale = inference?.rationale ? cleanResearchSentence(firstSentences(inference.rationale, 1)) : "";
+  const excerpt = sectionText ? firstSentences(excerptByKeywords(sectionText, config.keywords), 1) : "";
+
+  const pieces = [summary, evidence, rationale, excerpt]
+    .map((piece) => cleanResearchSentence(piece))
+    .filter(Boolean)
+    .filter((piece) => !isGenericResearchSentence(piece))
+    .filter((piece, index, all) => all.findIndex((candidate) => candidate === piece) === index)
+    .slice(0, 2);
+
+  return pieces.join(" ") || factor.note;
+}
+
+function impactFromResearch(
+  input: ProjectInput,
+  blockId: BlockId,
+  factor: BlockScore["factors"][number]
+) {
+  const config = factorConfig(blockId, factor.label);
+  const factorName = factor.label.toLowerCase();
+  const base =
+    factor.score >= 7 ? config.goodImpact : factor.score >= 5 ? config.mediumImpact : config.lowImpact;
+
+  switch (blockId) {
+    case "septe":
+      if (factor.score >= 7) {
+        return `${factor.label} hoy acompaña la apertura de ${input.projectName} en ${input.city}: ${base} Conviene ${config.action}.`;
+      }
+      if (factor.score >= 5) {
+        return `${factor.label} no invalida la entrada, pero sí pide una adaptación del proyecto al entorno local; ${base} Por eso conviene ${config.action}.`;
+      }
+      return `${factor.label} se transforma en una fricción de entorno para ${input.projectName}; ${base} Antes de abrir, hace falta ${config.action}.`;
+
+    case "porter":
+      if (factor.score >= 7) {
+        return `En ${factorName}, el proyecto muestra una posición competitiva relativamente defendible: ${base} La prioridad es ${config.action}.`;
+      }
+      if (factor.score >= 5) {
+        return `En ${factorName}, ${input.projectName} puede competir, pero sin demasiado margen para errores: ${base} Se vuelve necesario ${config.action}.`;
+      }
+      return `En ${factorName}, la presión del mercado objetivo es alta para ${input.projectName}; ${base} El proyecto debería ${config.action}.`;
+
+    case "foda":
+      if (factor.score >= 7) {
+        return `${factor.label} aporta una palanca clara para sostener la tesis del negocio: ${base} El reto es ${config.action}.`;
+      }
+      if (factor.score >= 5) {
+        return `${factor.label} aparece como un frente mixto dentro del diagnóstico estratégico: ${base} Para fortalecerlo, conviene ${config.action}.`;
+      }
+      return `${factor.label} deja una brecha estratégica visible en el caso analizado: ${base} El siguiente paso debe ser ${config.action}.`;
+
+    case "mercado":
+      if (factor.score >= 7) {
+        return `${factor.label} respalda la defensa comercial del proyecto en ${input.city}: ${base} Aun así, conviene ${config.action}.`;
+      }
+      if (factor.score >= 5) {
+        return `${factor.label} deja una oportunidad utilizable, pero todavía condicionada por validación comercial: ${base} Por eso hace falta ${config.action}.`;
+      }
+      return `${factor.label} sigue siendo un punto débil para justificar la entrada al mercado: ${base} Antes de avanzar, toca ${config.action}.`;
+
+    case "finanzas":
+      if (factor.score >= 7) {
+        return `${factor.label} mejora la defensa económica del proyecto: ${base} La lectura recomienda ${config.action}.`;
+      }
+      if (factor.score >= 5) {
+        return `${factor.label} permite sostener el caso, aunque bajo supuestos prudentes: ${base} Lo razonable es ${config.action}.`;
+      }
+      return `${factor.label} compromete la robustez financiera del proyecto: ${base} El caso exige ${config.action}.`;
+
+    case "operacionLegalidad":
+      if (factor.score >= 7) {
+        return `${factor.label} facilita una implementación más controlable del negocio: ${base} Lo conveniente es ${config.action}.`;
+      }
+      if (factor.score >= 5) {
+        return `${factor.label} deja una operación posible, pero todavía frágil en ejecución o cumplimiento: ${base} Será clave ${config.action}.`;
+      }
+      return `${factor.label} hoy pone presión directa sobre la apertura y operación del proyecto: ${base} Antes de seguir, corresponde ${config.action}.`;
+  }
+}
+
+function factorNarrativesFromResearch(
+  input: ProjectInput,
+  block: BlockScore,
+  research: ResearchDossier
+) {
+  return block.factors.slice(0, 7).map((factor) => ({
+    label: factor.label,
+    headline: `${factor.label} registra ${factor.score.toFixed(1)}/10.`,
+    assessment: assessmentFromResearch(block.id, factor, research),
+    impact: impactFromResearch(input, block.id, factor)
+  }));
+}
+
+function recommendationFromWeakBlock(
+  input: ProjectInput,
+  block: BlockScore,
+  research: ResearchDossier
+) {
+  const weakestFactor = [...block.factors].sort((left, right) => left.score - right.score)[0];
+  const config = factorConfig(block.id, weakestFactor?.label ?? block.label);
+  const finding = weakestFactor ? relevantFinding(block.id, weakestFactor.label, research) : undefined;
+  const rationale = weakestFactor ? relevantInference(block.id, weakestFactor.label, research)?.rationale : "";
+  const evidence = firstSentences(finding?.evidence ?? rationale ?? "", 1);
+
+  switch (block.id) {
+    case "septe":
+      return `Aterrizar ${weakestFactor?.label.toLowerCase() ?? "el frente SEPTE"} con un supuesto verificable para ${input.city}: ${evidence || "validar entorno social, económico y regulatorio antes de escalar."}`;
+    case "porter":
+      return `Diseñar una respuesta competitiva específica frente a ${weakestFactor?.label.toLowerCase() ?? "la presión competitiva"}: ${evidence || "ajustar diferenciación, precio y captura de cliente antes de abrir."}`;
+    case "foda":
+      return `Convertir ${weakestFactor?.label.toLowerCase() ?? "la principal brecha FODA"} en un plan de mitigación con responsables y plazos: ${evidence || "cerrar vulnerabilidades internas antes de comprometer más inversión."}`;
+    case "mercado":
+      return `Validar ${weakestFactor?.label.toLowerCase() ?? "el supuesto comercial clave"} con evidencia de mercado real: ${evidence || "entrevistas, benchmark local y prueba comercial de bajo costo."}`;
+    case "finanzas":
+      return `Recalibrar ${weakestFactor?.label.toLowerCase() ?? "la hipótesis financiera"} bajo un escenario conservador: ${evidence || "alinear inversión, margen, ticket y ventas esperadas."}`;
+    case "operacionLegalidad":
+      return `Resolver ${weakestFactor?.label.toLowerCase() ?? "la brecha operativa y regulatoria"} antes de abrir: ${evidence || "ordenar permisos, proceso operativo y abastecimiento."}`;
+  }
+}
+
 function sectionForBlock(blockId: BlockId, research: ResearchDossier) {
   switch (blockId) {
     case "septe":
@@ -163,26 +799,6 @@ function sectionForBlock(blockId: BlockId, research: ResearchDossier) {
     default:
       return research.projectSummary;
   }
-}
-
-function factorNarrativesFromResearch(block: BlockScore, research: ResearchDossier) {
-  return block.factors.slice(0, 5).map((factor) => {
-    const relatedFinding = research.scoringInferences.find((inference) =>
-      inference.variable.toLowerCase().includes(factor.label.toLowerCase().split(" ")[0])
-    );
-
-    return {
-      label: factor.label,
-      headline: `${factor.label} registra ${factor.score.toFixed(1)}/10.`,
-      assessment: relatedFinding?.rationale ?? factor.note,
-      impact:
-        factor.score >= 7
-          ? "La evidencia investigada favorece este frente y mejora la defensa estratégica del proyecto."
-          : factor.score >= 5
-            ? "La evidencia investigada muestra un frente viable, pero todavía condicionado por ejecución y ajustes."
-            : "La evidencia investigada sugiere una restricción relevante que presiona la factibilidad del proyecto."
-    };
-  });
 }
 
 function buildResearchBackedNarrative(
@@ -215,12 +831,8 @@ function buildResearchBackedNarrative(
         relatedFindings.map((finding) => finding.evidence).slice(0, 3).filter(Boolean).length > 0
           ? relatedFindings.map((finding) => finding.evidence).slice(0, 3)
           : block.risks.slice(0, 3),
-      recommendation: block.score >= 7
-        ? "Capitalizar esta evidencia en un plan de ejecución medible y defendible."
-        : block.score >= 5
-          ? "Usar los hallazgos de investigación para cerrar brechas antes de escalar la inversión."
-          : "Reformular el proyecto en este frente antes de avanzar con una implementación completa.",
-      factorNarratives: factorNarrativesFromResearch(block, research)
+      recommendation: recommendationFromWeakBlock(input, block, research),
+      factorNarratives: factorNarrativesFromResearch(input, block, research)
     };
 
     return accumulator;
@@ -320,12 +932,17 @@ export function generateResearchBackedInsights(
     .slice(0, 5)
     .map((finding) => finding.evidence);
   const recommendations = [
-    ...research.assumptions.slice(0, 2).map((assumption) => `Validar el supuesto crítico: ${assumption}`),
+    ...research.assumptions
+      .slice(0, 2)
+      .map((assumption) => `Validar supuesto de investigación: ${assumption}`),
     ...scoreBreakdown.blocks
       .sort((left, right) => left.score - right.score)
-      .slice(0, 3)
-      .map((block) => `Priorizar ajustes en ${block.label}: ${reportNarrative.blockNarratives[block.id].recommendation}`)
-  ].slice(0, 6);
+      .slice(0, 4)
+      .map((block) => recommendationFromWeakBlock(input, block, research))
+  ]
+    .map((item) => compactText(item))
+    .filter((item, index, all) => all.findIndex((candidate) => candidate === item) === index)
+    .slice(0, 6);
 
   return {
     executiveSummary: research.projectSummary,

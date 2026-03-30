@@ -35,6 +35,48 @@ type ReportTabId =
   | "conclusion"
   | "recomendaciones";
 
+function normalizeParagraph(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[.:;,\-–—]+$/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function collectUniqueParagraphs(...values: string[]) {
+  const collected: { raw: string; normalized: string }[] = [];
+
+  values
+    .flatMap((value) => value.split(/\n{2,}|\n/))
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((item) => {
+      const normalized = normalizeParagraph(item);
+      if (!normalized) {
+        return;
+      }
+
+      const existingIndex = collected.findIndex(({ normalized: existing }) => {
+        return (
+          existing === normalized ||
+          existing.includes(normalized) ||
+          normalized.includes(existing)
+        );
+      });
+
+      if (existingIndex === -1) {
+        collected.push({ raw: item, normalized });
+        return;
+      }
+
+      if (normalized.length > collected[existingIndex].normalized.length) {
+        collected[existingIndex] = { raw: item, normalized };
+      }
+    });
+
+  return collected.map((item) => item.raw);
+}
+
 export function ReportPage() {
   const [snapshot, setSnapshot] = useState<EvaluationSnapshot | null>(null);
   const [activeTab, setActiveTab] = useState<ReportTabId>("resumen");
@@ -97,6 +139,12 @@ export function ReportPage() {
     activeTab === "operacionLegalidad"
       ? snapshot.scoreBreakdown.blocks.find((block) => block.id === activeTab)
       : null;
+  const executiveParagraphs = collectUniqueParagraphs(
+    snapshot.insights.executiveSummary,
+    snapshot.insights.reportNarrative.scoreSummary
+  );
+  const headerExecutiveParagraphs = executiveParagraphs.slice(0, 2);
+  const summarySupportParagraphs = executiveParagraphs.slice(2);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -131,21 +179,15 @@ export function ReportPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 Resumen ejecutivo
               </p>
-              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                <Bot className="h-3.5 w-3.5" />
-                {snapshot.insights.source === "gemini"
-                  ? `Gemini${snapshot.insights.model ? ` · ${snapshot.insights.model}` : ""}`
-                  : "Simulación local"}
+
+         
+              <div className="mt-4 space-y-4">
+                {headerExecutiveParagraphs.map((paragraph) => (
+                  <p key={paragraph} className="text-sm leading-7 text-slate-600 dark:text-slate-300">
+                    {paragraph}
+                  </p>
+                ))}
               </div>
-              <p className="mt-3 text-xs leading-6 text-slate-500 dark:text-slate-400">
-                Cuando la fuente es Gemini, el modelo redacta resumen, lectura del score, metodología, contexto,
-                detalle por bloque, conclusión y recomendaciones. El score, la clasificación y los gráficos siguen
-                siendo calculados por el motor interno del proyecto.
-              </p>
-              <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.executiveSummary}</p>
-              <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                {snapshot.insights.reportNarrative.scoreSummary}
-              </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Fecha</p>
@@ -190,13 +232,42 @@ export function ReportPage() {
         </Card>
 
         {activeTab === "resumen" ? (
+          <div className="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
+                <Card>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              Hallazgos principales
+            </p>
+            <div className="mt-5 grid gap-3">
+              {snapshot.insights.mainFindings.map((finding) => (
+                <div
+                  key={finding}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                >
+                  {finding}
+                </div>
+              ))}
+            </div>
+          </Card>
           <Card>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Resumen ejecutivo
+              Lectura ejecutiva
             </p>
-            <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.executiveSummary}</p>
-            <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{snapshot.insights.mainFindings.join(" ")}</p>
+            <div className="mt-4 space-y-4">
+              {summarySupportParagraphs.length ? (
+                summarySupportParagraphs.map((paragraph) => (
+                  <p key={paragraph} className="text-sm leading-7 text-slate-600 dark:text-slate-300">
+                    {paragraph}
+                  </p>
+                ))
+              ) : (
+                <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
+                  {snapshot.insights.scoreExplanation}
+                </p>
+              )}
+            </div>
           </Card>
+      
+          </div>
         ) : null}
 
         {activeTab === "score" ? (

@@ -21,6 +21,31 @@ import { getStoredEvaluation, setStoredEvaluation } from "@/lib/storage";
 import { formatDate, formatMoney, getCurrencyByCountry } from "@/lib/utils";
 import type { EvaluationSnapshot } from "@/types";
 
+function normalizeParagraph(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[.:;,\-–—]+$/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function collectUniqueParagraphs(...values: string[]) {
+  const seen = new Set<string>();
+
+  return values
+    .flatMap((value) => value.split(/\n{2,}|\n/))
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => {
+      const normalized = normalizeParagraph(item);
+      if (!normalized || seen.has(normalized)) {
+        return false;
+      }
+      seen.add(normalized);
+      return true;
+    });
+}
+
 export function ResultsDashboard() {
   const [snapshot, setSnapshot] = useState<EvaluationSnapshot | null>(null);
   const [comparisonId, setComparisonId] = useState<string>(demoProjectList[0]?.id ?? "");
@@ -135,8 +160,10 @@ export function ResultsDashboard() {
     ["Sensibilidad precio", snapshot.context.priceSensitivity],
     ["Facilidad regulatoria", snapshot.context.regulatoryEase]
   ] as const;
+  const executiveParagraphs = collectUniqueParagraphs(snapshot.insights.executiveSummary);
+  const cleanExecutiveSummary = executiveParagraphs.join("\n\n");
   const executiveSentences =
-    snapshot.insights.executiveSummary.match(/[^.!?]+[.!?]?/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
+    cleanExecutiveSummary.match(/[^.!?]+[.!?]?/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
   const executiveLead = executiveSentences.slice(0, 2).join(" ");
   const topInsightCards = [
     {
@@ -323,10 +350,16 @@ export function ResultsDashboard() {
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
             {snapshot.insights.source === "gemini" ? "Hallazgos con Gemini" : "Hallazgos tipo IA"}
           </p>
-          <div className="mt-4 space-y-4">
+            <div className="mt-4 space-y-4">
             <div>
               <h3 className="text-lg font-semibold text-slate-950 dark:text-slate-50">Resumen desarrollado</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{snapshot.insights.executiveSummary}</p>
+              <div className="mt-2 space-y-3">
+                {executiveParagraphs.map((paragraph) => (
+                  <p key={paragraph} className="text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
             </div>
             <div>
               <h3 className="text-lg font-semibold text-slate-950 dark:text-slate-50">Explicación del score</h3>
