@@ -308,15 +308,7 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
         mode?: "fallback";
       };
 
-      let enrichedSnapshot = payload.snapshot;
-
-      if (payload.mode !== "fallback") {
-        try {
-          enrichedSnapshot = await upgradeSnapshotInsights(payload.snapshot);
-        } catch {
-          enrichedSnapshot = payload.snapshot;
-        }
-      }
+      const enrichedSnapshot = payload.snapshot;
 
       if (!isUsableSnapshot(enrichedSnapshot)) {
         throw new Error("La investigación no devolvió una evaluación utilizable.");

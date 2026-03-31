@@ -79,6 +79,7 @@ export function ResultsDashboard() {
         body: JSON.stringify({
           input: currentSnapshot.input,
           context: currentSnapshot.context,
+          research: currentSnapshot.research,
           scoreBreakdown: currentSnapshot.scoreBreakdown,
           strict: true,
           useGroundedContext: true
