@@ -359,6 +359,39 @@ function clampScore(value: number | undefined) {
   return Math.max(1, Math.min(10, value));
 }
 
+function coerceFiniteNumber(value: string | number) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  const normalized = value.trim();
+  if (!normalized) return undefined;
+
+  const ratioMatch = normalized.match(/-?\d+(?:[.,]\d+)?\s*\/\s*10/);
+  if (ratioMatch) {
+    const ratioValue = Number(ratioMatch[0].split("/")[0].replace(",", ".").trim());
+    return Number.isFinite(ratioValue) ? ratioValue : undefined;
+  }
+
+  const numberMatch = normalized.match(/-?\d+(?:[.,]\d+)?/);
+  if (!numberMatch) return undefined;
+
+  const parsed = Number(numberMatch[0].replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function hasUsableScore(scoreBreakdown: EvaluationSnapshot["scoreBreakdown"]) {
+  if (!Number.isFinite(scoreBreakdown.finalScore)) return false;
+
+  return scoreBreakdown.blocks.every(
+    (block) =>
+      Number.isFinite(block.score) &&
+      Number.isFinite(block.weight) &&
+      Number.isFinite(block.contribution) &&
+      block.factors.every((factor) => Number.isFinite(factor.score))
+  );
+}
+
 function normalizeResearchDossier(
   base: {
     projectSummary: string;
@@ -539,10 +572,16 @@ function normalizeResearchPatch(rawPatch: Record<string, string | number>) {
   ]);
 
   return Object.fromEntries(
-    Object.entries(rawPatch).map(([key, value]) => [
-      key,
-      numericFields.has(key) ? Number(value) : value
-    ])
+    Object.entries(rawPatch).flatMap(([key, value]) => {
+      if (!numericFields.has(key)) {
+        return [[key, value]];
+      }
+
+      const parsed = coerceFiniteNumber(value);
+      if (parsed === undefined) return [];
+
+      return [[key, parsed]];
+    })
   ) as Partial<ProjectInput>;
 }
 
@@ -1146,11 +1185,23 @@ ${researchContext}`,
     generatedAt: new Date().toISOString()
   };
 
-  return {
+  const researchedSnapshot: EvaluationSnapshot = {
     ...snapshot,
     context,
     scoreBreakdown,
     research: dossier,
     generatedAt: new Date().toISOString()
   };
+
+  if (!hasUsableScore(researchedSnapshot.scoreBreakdown)) {
+    const fallbackSnapshot = buildEvaluationSnapshot(mergedInput, weights);
+
+    return {
+      ...fallbackSnapshot,
+      research: dossier,
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  return researchedSnapshot;
 }
