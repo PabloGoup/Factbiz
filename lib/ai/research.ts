@@ -440,31 +440,56 @@ function normalizeResearchDossier(
       legalBarriers: base.sections.legalBarriers.trim(),
       conclusion: base.sections.conclusion.trim()
     },
-    findings: base.findings.slice(0, 12).map((finding) => ({
-      ...finding,
-      title: ensureMinText(finding.title, 8, "Hallazgo relevante del caso"),
-      summary: ensureMinText(
-        finding.summary,
-        20,
-        "La investigación sugiere una implicancia concreta para la factibilidad del proyecto."
-      ),
-      evidence: ensureMinText(
-        finding.evidence,
-        20,
-        "Esta señal debe considerarse en la evaluación estratégica, comercial y operativa."
-      ),
-      sourceTitles:
-        clampSourceTitles(finding.sourceTitles).length > 0
-          ? clampSourceTitles(finding.sourceTitles)
-          : ["Investigación grounded de Gemini"]
-    })),
+    findings: base.findings
+      .filter(
+        (finding): finding is (typeof base.findings)[number] =>
+          Boolean(finding && typeof finding.title === "string" && typeof finding.summary === "string")
+      )
+      .slice(0, 12)
+      .map((finding) => ({
+        ...finding,
+        title: ensureMinText(finding.title, 8, "Hallazgo relevante del caso"),
+        summary: ensureMinText(
+          finding.summary,
+          20,
+          "La investigación sugiere una implicancia concreta para la factibilidad del proyecto."
+        ),
+        evidence: ensureMinText(
+          finding.evidence,
+          20,
+          "Esta señal debe considerarse en la evaluación estratégica, comercial y operativa."
+        ),
+        sourceTitles:
+          clampSourceTitles(finding.sourceTitles).length > 0
+            ? clampSourceTitles(finding.sourceTitles)
+            : ["Investigación grounded de Gemini"]
+      })),
     sources,
-    scoringInferences: base.scoringInferences.slice(0, 20).map((inference) => ({
-      ...inference,
-      variable: inference.variable.trim(),
-      rationale: inference.rationale.trim(),
-      sourceTitles: clampSourceTitles(inference.sourceTitles)
-    })),
+    scoringInferences: base.scoringInferences
+      .filter(
+        (inference): inference is (typeof base.scoringInferences)[number] =>
+          Boolean(
+            inference &&
+              typeof inference.variable === "string" &&
+              typeof inference.value === "string" &&
+              typeof inference.rationale === "string"
+          )
+      )
+      .slice(0, 20)
+      .map((inference) => ({
+        ...inference,
+        variable: ensureMinText(inference.variable, 3, "variable"),
+        value: ensureMinText(inference.value, 1, "5"),
+        rationale: ensureMinText(
+          inference.rationale,
+          16,
+          "La inferencia se obtuvo desde la investigación asistida y debe validarse con datos del caso."
+        ),
+        sourceTitles:
+          clampSourceTitles(inference.sourceTitles).length > 0
+            ? clampSourceTitles(inference.sourceTitles)
+            : ["Investigación grounded de Gemini"]
+      })),
     inferredProjectPatch: base.inferredProjectPatch ?? {},
     inferredLocationSignals: {
       ...base.inferredLocationSignals,

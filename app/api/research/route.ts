@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { runAcademicResearch } from "@/lib/ai/research";
+import { buildEvaluationSnapshot } from "@/lib/evaluation";
+import { mergeProjectDraft } from "@/lib/project-draft";
 import type { ProjectDraft, ProjectWeights } from "@/types";
 
 const weightsSchema = z.object({
@@ -20,8 +22,16 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  let payload:
+    | {
+        query: string;
+        draft?: ProjectDraft;
+        weights: ProjectWeights;
+      }
+    | null = null;
+
   try {
-    const payload = requestSchema.parse(await request.json()) as {
+    payload = requestSchema.parse(await request.json()) as {
       query: string;
       draft?: ProjectDraft;
       weights: ProjectWeights;
@@ -33,6 +43,17 @@ export async function POST(request: Request) {
       snapshot
     });
   } catch (error) {
+    console.error("[research] route fallback", error);
+
+    if (payload) {
+      const fallbackSnapshot = buildEvaluationSnapshot(mergeProjectDraft(payload.draft ?? {}), payload.weights);
+      return NextResponse.json({
+        snapshot: fallbackSnapshot,
+        warning: error instanceof Error ? error.message : "No fue posible investigar el proyecto.",
+        mode: "fallback"
+      });
+    }
+
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "No fue posible investigar el proyecto."

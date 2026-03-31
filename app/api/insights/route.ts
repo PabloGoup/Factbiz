@@ -147,15 +147,6 @@ export async function POST(request: Request) {
         });
       }
 
-      if (payload.strict) {
-        return NextResponse.json(
-          {
-            error: describeGeminiError(providerError)
-          },
-          { status: 503 }
-        );
-      }
-
       const fallbackInsights = generateMockAiInsights(payload.input, payload.context, payload.scoreBreakdown);
 
       return NextResponse.json({

@@ -297,7 +297,7 @@ export function ResultsDashboard() {
               Ubicación y contexto
             </p>
             <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-              {snapshot.context.city}, {snapshot.context.country}
+              {snapshot.context.city} {snapshot.context.country}
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{snapshot.context.narrative}</p>
           </div>
