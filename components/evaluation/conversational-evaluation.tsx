@@ -117,6 +117,21 @@ async function upgradeSnapshotInsights(snapshot: EvaluationSnapshot) {
   };
 }
 
+function isUsableSnapshot(snapshot: EvaluationSnapshot | null | undefined): snapshot is EvaluationSnapshot {
+  return Boolean(
+    snapshot &&
+      snapshot.input &&
+      typeof snapshot.input.projectName === "string" &&
+      snapshot.context &&
+      typeof snapshot.context.narrative === "string" &&
+      snapshot.scoreBreakdown &&
+      typeof snapshot.scoreBreakdown.finalScore === "number" &&
+      Array.isArray(snapshot.scoreBreakdown.blocks) &&
+      snapshot.insights &&
+      typeof snapshot.insights.executiveSummary === "string"
+  );
+}
+
 export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
   const router = useRouter();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -238,6 +253,9 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
     try {
       let snapshot = buildEvaluationSnapshot(mergeProjectDraft(session.draft), weights);
       snapshot = await upgradeSnapshotInsights(snapshot);
+      if (!isUsableSnapshot(snapshot)) {
+        throw new Error("El informe generado no contiene una evaluación válida.");
+      }
       setStoredProject(snapshot.input);
       setStoredWeights(weights);
       setStoredEvaluation(snapshot);
@@ -298,6 +316,10 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
         } catch {
           enrichedSnapshot = payload.snapshot;
         }
+      }
+
+      if (!isUsableSnapshot(enrichedSnapshot)) {
+        throw new Error("La investigación no devolvió una evaluación utilizable.");
       }
 
       setStoredProject(enrichedSnapshot.input);

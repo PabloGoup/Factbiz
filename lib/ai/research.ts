@@ -812,7 +812,7 @@ ${researchContext}`,
     researchOverviewSchema,
     1100
   ).catch((error) => {
-    console.error("[research] overview fallback", error);
+    console.warn("[research] overview fallback", error);
     return fallbackOverview(query, researchMemo);
   });
 
@@ -847,7 +847,7 @@ ${researchContext}`,
     researchSectionsCoreSchema,
     1900
   ).catch((error) => {
-    console.error("[research] core sections fallback", error);
+    console.warn("[research] core sections fallback", error);
     return {
       sections: {
         macroMicro: fallbackSectionsData.macroMicro,
@@ -891,7 +891,7 @@ ${researchContext}`,
     researchSectionsExtendedSchema,
     1900
   ).catch((error) => {
-    console.error("[research] extended sections fallback", error);
+    console.warn("[research] extended sections fallback", error);
     return {
       sections: {
         competitionStudy: fallbackSectionsData.competitionStudy,
@@ -951,7 +951,7 @@ ${researchContext}`,
     researchFindingsBundleSchema,
     1500
   ).catch((error) => {
-    console.error("[research] findings fallback", error);
+    console.warn("[research] findings fallback", error);
     return {
       findings: fallbackFindings(query, fallbackSectionsData, groundedSources)
     };
@@ -989,7 +989,7 @@ ${researchContext}`,
     researchSourcesBundleSchema,
     1200
   ).catch((error) => {
-    console.error("[research] sources fallback", error);
+    console.warn("[research] sources fallback", error);
     return {
       sources:
         groundedSources.length >= 4
@@ -1096,7 +1096,7 @@ ${researchContext}`,
     researchScoringBundleSchema,
     1600
   ).catch((error) => {
-    console.error("[research] scoring fallback", error);
+    console.warn("[research] scoring fallback", error);
     return fallbackScoringData;
   });
 

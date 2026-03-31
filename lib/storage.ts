@@ -19,6 +19,37 @@ function writeStorage<T>(key: StorageKey, value: T) {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
+function removeStorage(key: StorageKey) {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(key);
+}
+
+function isEvaluationSnapshotLike(value: unknown): value is EvaluationSnapshot {
+  if (!value || typeof value !== "object") return false;
+
+  const snapshot = value as Partial<EvaluationSnapshot> & {
+    scoreBreakdown?: { finalScore?: unknown; classification?: unknown; blocks?: unknown };
+    input?: { projectName?: unknown; city?: unknown; country?: unknown };
+    context?: { narrative?: unknown };
+    insights?: { executiveSummary?: unknown; source?: unknown };
+  };
+
+  return Boolean(
+    snapshot.input &&
+      typeof snapshot.input.projectName === "string" &&
+      typeof snapshot.input.city === "string" &&
+      typeof snapshot.input.country === "string" &&
+      snapshot.context &&
+      typeof snapshot.context.narrative === "string" &&
+      snapshot.scoreBreakdown &&
+      typeof snapshot.scoreBreakdown.finalScore === "number" &&
+      Array.isArray(snapshot.scoreBreakdown.blocks) &&
+      snapshot.insights &&
+      typeof snapshot.insights.executiveSummary === "string" &&
+      typeof snapshot.generatedAt === "string"
+  );
+}
+
 export function getStoredProject(fallback: ProjectInput) {
   return readStorage<ProjectInput>(STORAGE_KEYS.project, fallback);
 }
@@ -36,7 +67,14 @@ export function setStoredWeights(weights: ProjectWeights) {
 }
 
 export function getStoredEvaluation() {
-  return readStorage<EvaluationSnapshot | null>(STORAGE_KEYS.evaluation, null);
+  const snapshot = readStorage<EvaluationSnapshot | null>(STORAGE_KEYS.evaluation, null);
+
+  if (snapshot && !isEvaluationSnapshotLike(snapshot)) {
+    removeStorage(STORAGE_KEYS.evaluation);
+    return null;
+  }
+
+  return snapshot;
 }
 
 export function setStoredEvaluation(snapshot: EvaluationSnapshot) {
