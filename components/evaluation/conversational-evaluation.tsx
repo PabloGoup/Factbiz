@@ -284,8 +284,21 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
         throw new Error(payload.error ?? "No fue posible investigar el proyecto.");
       }
 
-      const payload = (await response.json()) as { snapshot: EvaluationSnapshot };
-      const enrichedSnapshot = await upgradeSnapshotInsights(payload.snapshot);
+      const payload = (await response.json()) as {
+        snapshot: EvaluationSnapshot;
+        warning?: string;
+        mode?: "fallback";
+      };
+
+      let enrichedSnapshot = payload.snapshot;
+
+      if (payload.mode !== "fallback") {
+        try {
+          enrichedSnapshot = await upgradeSnapshotInsights(payload.snapshot);
+        } catch {
+          enrichedSnapshot = payload.snapshot;
+        }
+      }
 
       setStoredProject(enrichedSnapshot.input);
       setStoredWeights(weights);
@@ -300,6 +313,9 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
           "La investigación académica ya alimentó el score con señales externas, supuestos e inferencias estructuradas.",
         recommendedNextFocus: "Revisar dossier académico y score ejecutivo"
       });
+      if (payload.warning) {
+        setError(null);
+      }
       router.push("/resultado");
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "No fue posible investigar el proyecto.");

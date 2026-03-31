@@ -118,7 +118,6 @@ export async function POST(request: Request) {
           scoreBreakdown = evaluateProject(payload.input, context, payload.scoreBreakdown.weights);
         } catch (groundedError) {
           groundedContextWarning = describeGeminiError(groundedError);
-          console.error("[insights] grounded context fallback", groundedError);
         }
       }
 
