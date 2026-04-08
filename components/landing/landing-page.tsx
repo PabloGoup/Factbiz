@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BarChart3,
   Bot,
+  Building2,
   FileOutput,
   MessageSquareText,
   MapPinned,
@@ -88,6 +89,12 @@ export function LandingPage() {
                     Ver formato de informe
                   </Button>
                 </Link>
+                <Link href="/casos-hoteleros" className="inline-flex">
+                  <Button variant="ghost" className="gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Ir a casos hoteleros
+                  </Button>
+                </Link>
               </div>
               <div className="mt-10 grid gap-4 sm:grid-cols-3">
                 {[
@@ -142,6 +149,21 @@ export function LandingPage() {
                   <div className="rounded-xl bg-emerald-50 p-3 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100">
                     7.0 - 10.0 Factible
                   </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Nuevo apartado</p>
+                <div className="mt-3 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-lg font-semibold text-slate-950 dark:text-slate-50">Casos hoteleros</p>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                      Modulo separado para forecast de ocupacion, ADR, desayuno y comisiones.
+                    </p>
+                  </div>
+                  <Link href="/casos-hoteleros">
+                    <Button variant="secondary">Abrir modulo</Button>
+                  </Link>
                 </div>
               </div>
             </Card>

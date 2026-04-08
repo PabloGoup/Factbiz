@@ -257,3 +257,191 @@ export type InterviewSession = {
   recommendedNextFocus?: string;
   lastModel?: string;
 };
+
+export type HotelDestinationId =
+  | "patagonia-chilena"
+  | "puerto-varas"
+  | "villarrica"
+  | "san-pedro-de-atacama"
+  | "papudo";
+
+export type HotelSalesChannelId = "tourOperators" | "onlineAgencies" | "direct" | "corporate";
+
+export type HotelRoomMix = {
+  single: number;
+  double: number;
+  triple: number;
+  suite: number;
+};
+
+export type HotelRoomRates = {
+  single: number;
+  double: number;
+  triple: number;
+  suite: number;
+};
+
+export type HotelChannelConfig = {
+  share: number;
+  commission: number;
+};
+
+export type HotelChannelMap = Record<HotelSalesChannelId, HotelChannelConfig>;
+
+export type HotelCaseInput = {
+  hotelName: string;
+  destination: HotelDestinationId;
+  region: string;
+  country: string;
+  category: string;
+  concept: string;
+  services: string;
+  differentiation: string;
+  totalRooms: number;
+  roomMix: HotelRoomMix;
+  roomRates: HotelRoomRates;
+  previousAverageRate: number;
+  targetAverageRate: number;
+  guestFactor: number;
+  breakfastPriceCurrent: number;
+  breakfastPriceProposed: number;
+  occupancyJanuary: number;
+  occupancyFebruary: number;
+  channels: HotelChannelMap;
+};
+
+export type HotelTouristStat = {
+  label: string;
+  value: string;
+  note: string;
+  asOf?: string;
+  sourceTitle?: string;
+  sourceUrl?: string;
+};
+
+export type HotelEvidencePoint = {
+  label: string;
+  value: string;
+  note: string;
+  asOf?: string;
+  sourceTitle?: string;
+  sourceUrl?: string;
+};
+
+export type HotelAttraction = {
+  name: string;
+  relevance: string;
+  sourceTitle?: string;
+  sourceUrl?: string;
+};
+
+export type HotelCompetitor = {
+  name: string;
+  area: string;
+  positioning: string;
+  services: string[];
+  facilities: string[];
+  rates: HotelRoomRates;
+  note: string;
+};
+
+export type HotelSepteFactorId =
+  | "social"
+  | "economic"
+  | "political"
+  | "technological"
+  | "ecological"
+  | "legal";
+
+export type HotelSepteFactor = {
+  id: HotelSepteFactorId;
+  label: string;
+  analysis: string;
+  implication: string;
+  evidence: HotelEvidencePoint[];
+};
+
+export type HotelStrategicPlan = {
+  objective: string;
+  positioning: string;
+  goals: string[];
+  actions: string[];
+  commercialRationale: string;
+  pricingRationale: string;
+};
+
+export type HotelResearchReport = {
+  destinationLabel: string;
+  destinationDiagnosis: string;
+  septeFactors: HotelSepteFactor[];
+  competitionSummary: string;
+  competitors: HotelCompetitor[];
+  attractions: HotelAttraction[];
+  touristStats: HotelTouristStat[];
+  marketRateReference: HotelRoomRates;
+  strategicPlan: HotelStrategicPlan;
+  sources: ResearchSource[];
+  mode: "mock" | "gemini";
+  warning?: string;
+};
+
+export type HotelRoomTypeResult = {
+  type: keyof HotelRoomMix;
+  availableRooms: number;
+  soldRoomNights: number;
+  rate: number;
+  revenue: number;
+};
+
+export type HotelChannelResult = {
+  channel: HotelSalesChannelId;
+  share: number;
+  commission: number;
+  occupiedRoomNights: number;
+  grossRevenue: number;
+  commissionCost: number;
+  netRevenue: number;
+  netAdr: number;
+};
+
+export type HotelMonthlyForecast = {
+  month: "Enero 2027" | "Febrero 2027";
+  days: number;
+  availableRoomNights: number;
+  occupiedRoomNights: number;
+  occupancyRate: number;
+  totalGuests: number;
+  achievedAdr: number;
+  grossRoomRevenue: number;
+  breakfastRevenueCurrent: number;
+  breakfastRevenueProposed: number;
+  breakfastRevenueDelta: number;
+  commissionsTotal: number;
+  netRoomRevenue: number;
+  roomTypeResults: HotelRoomTypeResult[];
+  channelResults: HotelChannelResult[];
+};
+
+export type HotelForecastSummary = {
+  totalGrossRoomRevenue: number;
+  totalNetRoomRevenue: number;
+  totalBreakfastRevenueCurrent: number;
+  totalBreakfastRevenueProposed: number;
+  totalBreakfastDelta: number;
+  totalCommissions: number;
+  weightedAverageAdr: number;
+  adrTargetMet: boolean;
+  adrGap: number;
+  mostProfitableChannel: HotelSalesChannelId;
+  largestNetContributor: HotelSalesChannelId;
+  warnings: string[];
+  recommendations: string[];
+};
+
+export type HotelCaseResult = {
+  input: HotelCaseInput;
+  research: HotelResearchReport;
+  monthlyForecasts: HotelMonthlyForecast[];
+  summary: HotelForecastSummary;
+  generatedAt: string;
+};

@@ -57,6 +57,15 @@ body.dark {
 }
 
 @media print {
+  @page {
+    margin: 16mm;
+    size: A4;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+
   body {
     background: white;
     color: #0f172a;
@@ -75,5 +84,16 @@ body.dark {
     box-shadow: none !important;
     border-color: #cbd5e1 !important;
     background: white !important;
+  }
+
+  .report-page-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  svg,
+  canvas {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

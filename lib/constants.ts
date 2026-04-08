@@ -4,7 +4,9 @@ export const STORAGE_KEYS = {
   project: "factibiz.project",
   weights: "factibiz.weights",
   evaluation: "factibiz.evaluation",
-  interview: "factibiz.interview"
+  interview: "factibiz.interview",
+  hotelCase: "factibiz.hotel-case",
+  hotelResult: "factibiz.hotel-result"
 } as const;
 
 export const BLOCK_LABELS: Record<BlockId, string> = {

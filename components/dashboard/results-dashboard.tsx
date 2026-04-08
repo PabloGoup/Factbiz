@@ -1,23 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bot, Copy, Download, FileText, RefreshCcw } from "lucide-react";
 
 import { BlocksBarChart } from "@/components/charts/blocks-bar-chart";
 import { BlocksRadarChart } from "@/components/charts/blocks-radar-chart";
 import { FinalScoreDonut } from "@/components/charts/final-score-donut";
+import { ProjectComparisonStudio } from "@/components/dashboard/project-comparison-studio";
 import { RiskBalanceChart } from "@/components/charts/risk-balance-chart";
 import { SalesProjectionChart } from "@/components/charts/sales-projection-chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScoreBadge } from "@/components/ui/score-badge";
-import { demoProjectList, demoProjects } from "@/data/demoProjects";
+import { demoProjects } from "@/data/demoProjects";
 import { serializeEvaluationForClipboard } from "@/lib/ai/aiInsights";
 import { buildEvaluationSnapshot } from "@/lib/evaluation";
 import { downloadEvaluationJson } from "@/lib/report/export";
-import { getStoredEvaluation, setStoredEvaluation } from "@/lib/storage";
+import { getStoredEvaluation, setStoredEvaluation, setStoredProject, setStoredWeights } from "@/lib/storage";
 import { formatDate, formatMoney, getCurrencyByCountry } from "@/lib/utils";
 import type { EvaluationSnapshot } from "@/types";
 
@@ -48,7 +49,6 @@ function collectUniqueParagraphs(...values: string[]) {
 
 export function ResultsDashboard() {
   const [snapshot, setSnapshot] = useState<EvaluationSnapshot | null>(null);
-  const [comparisonId, setComparisonId] = useState<string>(demoProjectList[0]?.id ?? "");
   const [copied, setCopied] = useState(false);
   const [insightStatus, setInsightStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [insightMessage, setInsightMessage] = useState<string | null>(null);
@@ -96,7 +96,7 @@ export function ResultsDashboard() {
         context?: EvaluationSnapshot["context"];
         scoreBreakdown?: EvaluationSnapshot["scoreBreakdown"];
         warning?: string | null;
-        mode: "mock" | "gemini";
+        mode: "mock" | "gemini" | "research-fallback";
       };
       const nextSnapshot = {
         ...currentSnapshot,
@@ -113,6 +113,9 @@ export function ResultsDashboard() {
           ? payload.warning
             ? `Insights generados con ${payload.insights.model ?? "modelo configurado"}. Contexto territorial reforzado con fallback heurístico: ${payload.warning}`
             : `Insights generados con ${payload.insights.model ?? "modelo configurado"}.`
+          : payload.mode === "research-fallback"
+            ? payload.insights.fallbackReason ??
+              `Insights construidos desde el dossier investigado por Gemini${payload.warning ? `. ${payload.warning}` : "."}`
           : payload.insights.fallbackReason ?? "Se mantuvo la simulación local."
       );
     } catch (error) {
@@ -135,18 +138,30 @@ export function ResultsDashboard() {
     void refreshInsights(snapshot);
   }, [snapshot]);
 
-  const comparisonSnapshot = useMemo(() => {
-    if (!comparisonId || !demoProjects[comparisonId]) return null;
-    return buildEvaluationSnapshot(demoProjects[comparisonId]);
-  }, [comparisonId]);
+  const loadImportedSnapshot = (nextSnapshot: EvaluationSnapshot) => {
+    setSnapshot(nextSnapshot);
+    setStoredProject(nextSnapshot.input);
+    setStoredWeights(nextSnapshot.scoreBreakdown.weights);
+    setStoredEvaluation(nextSnapshot);
+    requestedRef.current = nextSnapshot.insights.source === "gemini";
+    setInsightStatus(nextSnapshot.insights.source === "gemini" ? "ready" : "idle");
+    setInsightMessage(
+      nextSnapshot.insights.source === "gemini"
+        ? `Se cargó un informe ya enriquecido con ${nextSnapshot.insights.model ?? "Gemini"}.`
+        : "Se cargó un informe compatible en la aplicación."
+    );
+  };
 
   if (!snapshot) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <EmptyState
           title="No hay una evaluación cargada"
-          description="Completa el wizard o carga una demo para generar el dashboard ejecutivo."
+          description="Completa el wizard, carga una demo o importa un informe para generar el dashboard ejecutivo."
         />
+        <div className="mt-6">
+          <ProjectComparisonStudio onLoadSnapshot={loadImportedSnapshot} />
+        </div>
       </div>
     );
   }
@@ -346,7 +361,7 @@ export function ResultsDashboard() {
         </Card>
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="mt-5">
         <Card className="p-5">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
             {snapshot.insights.source === "gemini" ? "Hallazgos con Gemini" : "Hallazgos tipo IA"}
@@ -399,73 +414,10 @@ export function ResultsDashboard() {
           </div>
         </Card>
 
-        <Card className="p-5">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                Comparación conceptual
-              </p>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                Contrasta este caso con otro proyecto demo
-              </h3>
-            </div>
-            <select
-              value={comparisonId}
-              onChange={(event) => setComparisonId(event.target.value)}
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm dark:border-slate-700 dark:bg-slate-950"
-            >
-              {demoProjectList.map(({ id, project }) => (
-                <option key={id} value={id}>
-                  {project.projectName}
-                </option>
-              ))}
-            </select>
-          </div>
+      </div>
 
-          {comparisonSnapshot ? (
-            <div className="mt-5 space-y-3">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Proyecto actual</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">{snapshot.input.projectName}</p>
-                  <p className="mt-4 font-serif text-4xl font-semibold text-slate-950 dark:text-slate-50">
-                    {snapshot.scoreBreakdown.finalScore.toFixed(1)}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{snapshot.scoreBreakdown.classification}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Proyecto comparado</p>
-                  <p className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">{comparisonSnapshot.input.projectName}</p>
-                  <p className="mt-4 font-serif text-4xl font-semibold text-slate-950 dark:text-slate-50">
-                    {comparisonSnapshot.scoreBreakdown.finalScore.toFixed(1)}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{comparisonSnapshot.scoreBreakdown.classification}</p>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
-                  Diferencia: {(snapshot.scoreBreakdown.finalScore - comparisonSnapshot.scoreBreakdown.finalScore).toFixed(1)} puntos
-                </p>
-                <div className="mt-4 grid gap-2">
-                  {snapshot.scoreBreakdown.blocks.map((block) => {
-                    const otherBlock = comparisonSnapshot.scoreBreakdown.blocks.find((item) => item.id === block.id);
-                    const delta = block.score - (otherBlock?.score ?? 0);
-
-                    return (
-                      <div key={block.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950">
-                        <span className="font-medium text-slate-900 dark:text-slate-50">{block.label}</span>
-                        <span className={delta >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}>
-                          {delta >= 0 ? "+" : ""}
-                          {delta.toFixed(1)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </Card>
+      <div className="mt-5">
+        <ProjectComparisonStudio currentSnapshot={snapshot} onLoadSnapshot={loadImportedSnapshot} />
       </div>
 
       {snapshot.research ? (

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FileText, LayoutDashboard, PencilRuler } from "lucide-react";
+import { BarChart3, Building2, FileText, LayoutDashboard, PencilRuler } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "Inicio", icon: LayoutDashboard },
   { href: "/evaluacion", label: "Evaluación", icon: PencilRuler },
+  { href: "/casos-hoteleros", label: "Casos Hoteleros", icon: Building2 },
   { href: "/resultado", label: "Resultados", icon: BarChart3 },
   { href: "/informe", label: "Informe", icon: FileText }
 ];

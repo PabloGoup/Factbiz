@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
+import { generateResearchBackedInsights } from "@/lib/ai/aiInsights";
 import { parseGeminiJson } from "@/lib/ai/gemini";
 import { getLocationContext } from "@/lib/context/locationContextService";
 import { buildEvaluationSnapshot } from "@/lib/evaluation";
@@ -1189,6 +1190,7 @@ ${researchContext}`,
     ...snapshot,
     context,
     scoreBreakdown,
+    insights: generateResearchBackedInsights(mergedInput, context, scoreBreakdown, dossier),
     research: dossier,
     generatedAt: new Date().toISOString()
   };
@@ -1198,6 +1200,12 @@ ${researchContext}`,
 
     return {
       ...fallbackSnapshot,
+      insights: generateResearchBackedInsights(
+        fallbackSnapshot.input,
+        fallbackSnapshot.context,
+        fallbackSnapshot.scoreBreakdown,
+        dossier
+      ),
       research: dossier,
       generatedAt: new Date().toISOString()
     };

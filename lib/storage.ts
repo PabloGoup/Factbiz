@@ -1,5 +1,12 @@
 import { STORAGE_KEYS } from "@/lib/constants";
-import type { EvaluationSnapshot, InterviewSession, ProjectInput, ProjectWeights } from "@/types";
+import type {
+  EvaluationSnapshot,
+  HotelCaseInput,
+  HotelCaseResult,
+  InterviewSession,
+  ProjectInput,
+  ProjectWeights
+} from "@/types";
 
 type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
 
@@ -87,4 +94,47 @@ export function getStoredInterview() {
 
 export function setStoredInterview(session: InterviewSession) {
   writeStorage(STORAGE_KEYS.interview, session);
+}
+
+function isHotelCaseResultLike(value: unknown): value is HotelCaseResult {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Partial<HotelCaseResult> & {
+    input?: { hotelName?: unknown; destination?: unknown };
+    summary?: { weightedAverageAdr?: unknown };
+    monthlyForecasts?: unknown;
+  };
+
+  return Boolean(
+    candidate.input &&
+      typeof candidate.input.hotelName === "string" &&
+      typeof candidate.input.destination === "string" &&
+      candidate.summary &&
+      typeof candidate.summary.weightedAverageAdr === "number" &&
+      Array.isArray(candidate.monthlyForecasts) &&
+      typeof candidate.generatedAt === "string"
+  );
+}
+
+export function getStoredHotelCase(fallback: HotelCaseInput) {
+  return readStorage<HotelCaseInput>(STORAGE_KEYS.hotelCase, fallback);
+}
+
+export function setStoredHotelCase(input: HotelCaseInput) {
+  writeStorage(STORAGE_KEYS.hotelCase, input);
+}
+
+export function getStoredHotelResult() {
+  const result = readStorage<HotelCaseResult | null>(STORAGE_KEYS.hotelResult, null);
+
+  if (result && !isHotelCaseResultLike(result)) {
+    removeStorage(STORAGE_KEYS.hotelResult);
+    return null;
+  }
+
+  return result;
+}
+
+export function setStoredHotelResult(result: HotelCaseResult) {
+  writeStorage(STORAGE_KEYS.hotelResult, result);
 }

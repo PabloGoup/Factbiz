@@ -3,6 +3,12 @@ import { z } from "zod";
 
 import type { InsightReport, LocationContext, ProjectInput, ScoreBreakdown } from "@/types";
 
+const GEMINI_API_KEY_ENV_CANDIDATES = [
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "GOOGLE_GENERATIVE_AI_API_KEY"
+] as const;
+
 const geminiInsightSchema = z.object({
   executiveSummary: z.string().min(40),
   scoreExplanation: z.string().min(30),
@@ -541,12 +547,37 @@ export function parseGeminiJson<T>(rawOutput: string): T {
 }
 
 export function isGeminiConfigured() {
-  return Boolean(process.env.GEMINI_API_KEY);
+  return Boolean(getGeminiApiKey());
 }
 
-export function describeGeminiError(error: unknown) {
+export function getGeminiApiKey() {
+  for (const envName of GEMINI_API_KEY_ENV_CANDIDATES) {
+    const value = process.env[envName];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+export function createGeminiClient() {
+  const apiKey = getGeminiApiKey();
+
+  if (!apiKey) {
+    throw new Error(
+      `No se encontró credencial de Gemini. Configura una de estas variables: ${GEMINI_API_KEY_ENV_CANDIDATES.join(", ")}.`
+    );
+  }
+
+  return new GoogleGenAI({ apiKey });
+}
+
+export function describeGeminiError(error: unknown, options?: { fallbackUsed?: boolean }) {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
+  const fallbackSuffix = options?.fallbackUsed === false ? "" : " Se usó simulación local.";
+  const detail = message && message !== "[object Object]" ? ` Detalle: ${message}` : "";
 
   if (
     normalized.includes("404") ||
@@ -554,7 +585,7 @@ export function describeGeminiError(error: unknown) {
     normalized.includes("no longer available to new users") ||
     normalized.includes("update your code to use a newer model")
   ) {
-    return "El modelo configurado de Gemini ya no está disponible. Se usó simulación local.";
+    return `El modelo configurado de Gemini ya no está disponible.${fallbackSuffix}`;
   }
 
   if (
@@ -563,18 +594,22 @@ export function describeGeminiError(error: unknown) {
     normalized.includes("quota") ||
     normalized.includes("rate limit")
   ) {
-    return "Gemini no estuvo disponible por límite de cuota. Se usó simulación local.";
+    return `Gemini no estuvo disponible por límite de cuota.${fallbackSuffix}`;
+  }
+
+  if (normalized.includes("permission_denied") || normalized.includes("project has been denied access")) {
+    return "El proyecto asociado a la API key de Gemini fue rechazado por Google. Debes crear una nueva API key o usar otro proyecto habilitado.";
   }
 
   if (normalized.includes("401") || normalized.includes("403") || normalized.includes("api key")) {
-    return "Gemini no pudo autenticarse con la credencial configurada. Se usó simulación local.";
+    return `Gemini no pudo autenticarse con la credencial configurada.${fallbackSuffix}`;
   }
 
   if (normalized.includes("network") || normalized.includes("fetch") || normalized.includes("timeout")) {
-    return "Gemini no respondió por un problema de red o tiempo de espera. Se usó simulación local.";
+    return `Gemini no respondió por un problema de red o tiempo de espera.${fallbackSuffix}`;
   }
 
-  return "Gemini no respondió correctamente. Se usó simulación local.";
+  return `Gemini no respondió correctamente.${fallbackSuffix}${detail}`;
 }
 
 async function repairGeminiInsightsPayload(
@@ -675,13 +710,7 @@ export async function generateGeminiInsights(
   context: LocationContext,
   scoreBreakdown: ScoreBreakdown
 ): Promise<InsightReport> {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY no está configurada.");
-  }
-
-  const client = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY
-  });
+  const client = createGeminiClient();
   const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite";
   const compactPayload = buildCompactInsightPayload(input, context, scoreBreakdown);
 
