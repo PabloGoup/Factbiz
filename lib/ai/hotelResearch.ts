@@ -450,10 +450,11 @@ function collectResearchSources(
 
   for (const factor of septeFactors) {
     for (const evidence of factor.evidence ?? []) {
-      if (evidence.sourceTitle && isUsableSourceUrl(evidence.sourceUrl)) {
+      const sourceUrl = evidence.sourceUrl;
+      if (evidence.sourceTitle && sourceUrl && isUsableSourceUrl(sourceUrl)) {
         collected.push({
           title: evidence.sourceTitle,
-          url: evidence.sourceUrl,
+          url: sourceUrl,
           note: evidence.asOf ? `Dato citado para SEPTE. Periodo o fecha: ${evidence.asOf}.` : "Dato citado para SEPTE."
         });
       }
@@ -461,20 +462,22 @@ function collectResearchSources(
   }
 
   for (const stat of touristStats) {
-    if (stat.sourceTitle && isUsableSourceUrl(stat.sourceUrl)) {
+    const sourceUrl = stat.sourceUrl;
+    if (stat.sourceTitle && sourceUrl && isUsableSourceUrl(sourceUrl)) {
       collected.push({
         title: stat.sourceTitle,
-        url: stat.sourceUrl,
+        url: sourceUrl,
         note: stat.asOf ? `Dato de demanda. Periodo o fecha: ${stat.asOf}.` : "Dato de demanda citado en el analisis."
       });
     }
   }
 
   for (const attraction of attractions) {
-    if (attraction.sourceTitle && isUsableSourceUrl(attraction.sourceUrl)) {
+    const sourceUrl = attraction.sourceUrl;
+    if (attraction.sourceTitle && sourceUrl && isUsableSourceUrl(sourceUrl)) {
       collected.push({
         title: attraction.sourceTitle,
-        url: attraction.sourceUrl,
+        url: sourceUrl,
         note: "Fuente oficial o de referencia para el atractivo del destino."
       });
     }
@@ -492,9 +495,9 @@ async function generateStructuredHotelResearch(
   const generateSection = async <T>(
     prompt: string,
     schema: unknown,
-    validator: z.ZodType<T>,
+    validator: z.ZodTypeAny,
     maxOutputTokens: number
-  ) => {
+  ): Promise<T> => {
     const runStructuredCall = async (contents: string, outputTokens: number, temperature = 0.2) => {
       const response = await client.models.generateContent({
         model,
@@ -540,11 +543,11 @@ async function generateStructuredHotelResearch(
     const rawOutput = await runStructuredCall(prompt, maxOutputTokens);
 
     try {
-      return validator.parse(parseGeminiJson(rawOutput));
+      return validator.parse(parseGeminiJson(rawOutput)) as T;
     } catch {
       try {
         const repaired = await repairStructuredPayload(rawOutput, maxOutputTokens);
-        return validator.parse(repaired);
+        return validator.parse(repaired) as T;
       } catch {
         const compactPrompt = `${prompt}
 
@@ -558,10 +561,10 @@ IMPORTANTE:
         const compactRawOutput = await runStructuredCall(compactPrompt, Math.min(maxOutputTokens, 900), 0.1);
 
         try {
-          return validator.parse(parseGeminiJson(compactRawOutput));
+          return validator.parse(parseGeminiJson(compactRawOutput)) as T;
         } catch {
           const repairedCompact = await repairStructuredPayload(compactRawOutput, Math.min(maxOutputTokens, 900));
-          return validator.parse(repairedCompact);
+          return validator.parse(repairedCompact) as T;
         }
       }
     }
