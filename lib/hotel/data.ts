@@ -5,11 +5,13 @@ import type {
   HotelCaseInput,
   HotelCompetitor,
   HotelDestinationId,
+  HotelEvidencePoint,
   HotelReferenceHotel,
   HotelResearchReport,
   HotelRoomRates,
   HotelSalesChannelId,
   HotelSepteFactor,
+  HotelSepteFactorId,
   HotelStrategicPlan,
   HotelTouristStat,
   ResearchSource
@@ -52,6 +54,216 @@ export const DEFAULT_HOTEL_CHANNELS = {
   corporate: { share: 15, commission: 10 }
 } as const;
 
+const CHILE_RECEPTIVE_TOURISM_SOURCE: ResearchSource = {
+  title: "Subsecretaría de Turismo - Llegadas de turistas extranjeros al país",
+  url: "https://www.subturismo.gob.cl/2026/02/26/chile-supera-los-6-millones-de-turistas-extranjeros-en-2025-la-mejor-cifra-desde-2017-y-el-mayor-registro-post-pandemia/",
+  note: "Referencia oficial de llegadas internacionales de turistas a Chile durante 2025."
+};
+
+type DestinationNumericContext = {
+  regionSource: ResearchSource;
+  asOf: string;
+  pernoctations: string;
+  occupancy: string;
+  adr: string;
+  growth: string;
+};
+
+const DESTINATION_NUMERIC_CONTEXT: Record<HotelDestinationId, DestinationNumericContext> = {
+  "patagonia-chilena": {
+    regionSource: {
+      title: "INE Magallanes - EMAT febrero 2025",
+      url: "https://regiones.ine.gob.cl/magallanes/prensa/en-febrero-de-2025-las-pernoctaciones-en-establecimientos-de-alojamiento-tur%C3%ADstico-de-magallanes-aumentaron-1-6",
+      note: "Fuente oficial de pernoctaciones, ocupación y ADR de la Región de Magallanes y de la Antártica Chilena."
+    },
+    asOf: "Febrero 2025",
+    pernoctations: "105.247",
+    occupancy: "59,8%",
+    adr: "CLP 245.820",
+    growth: "+1,6% interanual"
+  },
+  "puerto-varas": {
+    regionSource: {
+      title: "INE Los Lagos - EMAT febrero 2025",
+      url: "https://regiones.ine.gob.cl/los-lagos/prensa/las-pernoctaciones-en-establecimientos-de-alojamiento-tur%C3%ADstico-registraron-un-aumento-de-0-4-en-doce-meses",
+      note: "Fuente oficial de pernoctaciones, ocupación y ADR de la Región de Los Lagos."
+    },
+    asOf: "Febrero 2025",
+    pernoctations: "226.770",
+    occupancy: "55,4%",
+    adr: "CLP 94.095",
+    growth: "+0,4% interanual"
+  },
+  villarrica: {
+    regionSource: {
+      title: "INE La Araucanía - EMAT febrero 2025",
+      url: "https://regiones.ine.gob.cl/araucania/estadisticas-regionales/sociales/condiciones-de-vida-y-cultura/cultura/las-pernoctaciones-en-establecimientos-de-alojamiento-tur%C3%ADstico-aumentaron-41-6-en-febrero-2025",
+      note: "Fuente oficial de pernoctaciones, ocupación y ADR de la Región de La Araucanía."
+    },
+    asOf: "Febrero 2025",
+    pernoctations: "200.516",
+    occupancy: "53,0%",
+    adr: "CLP 81.832",
+    growth: "+41,6% interanual"
+  },
+  "san-pedro-de-atacama": {
+    regionSource: {
+      title: "INE Antofagasta - EMAT febrero 2026",
+      url: "https://regiones.ine.gob.cl/antofagasta/prensa/las-pernoctaciones-en-establecimientos-de-alojamiento-tur%C3%ADstico-registraron-un-aumento-de-10-4-en-doce-meses",
+      note: "Fuente oficial de pernoctaciones, ocupación y ADR de la Región de Antofagasta."
+    },
+    asOf: "Febrero 2026",
+    pernoctations: "129.927",
+    occupancy: "52,3%",
+    adr: "CLP 87.974",
+    growth: "+10,4% interanual"
+  },
+  papudo: {
+    regionSource: {
+      title: "INE Valparaíso - EMAT febrero 2025",
+      url: "https://regiones.ine.gob.cl/valparaiso/prensa/encuesta-mensual-de-alojamiento-tur%C3%ADstico-%28emat%29-febrero-2025",
+      note: "Fuente oficial de pernoctaciones, ocupación y ADR de la Región de Valparaíso."
+    },
+    asOf: "Febrero 2025",
+    pernoctations: "357.004",
+    occupancy: "47,2%",
+    adr: "CLP 93.657",
+    growth: "+11,9% interanual"
+  }
+};
+
+function buildOfficialTouristStats(destinationId: HotelDestinationId): HotelTouristStat[] {
+  const context = DESTINATION_NUMERIC_CONTEXT[destinationId];
+
+  return [
+    {
+      label: "Turistas extranjeros que ingresaron a Chile",
+      value: "6.004.567 durante 2025",
+      note: "El turismo receptivo creció 14,6% versus 2024 y da una base dura del flujo internacional que puede alimentar destinos premium.",
+      asOf: "Año 2025",
+      sourceTitle: CHILE_RECEPTIVE_TOURISM_SOURCE.title,
+      sourceUrl: CHILE_RECEPTIVE_TOURISM_SOURCE.url
+    },
+    {
+      label: "Pernoctaciones regionales",
+      value: `${context.pernoctations} en ${context.asOf}`,
+      note: `La región registró una variación de ${context.growth} en pernoctaciones de alojamiento turístico.`,
+      asOf: context.asOf,
+      sourceTitle: context.regionSource.title,
+      sourceUrl: context.regionSource.url
+    },
+    {
+      label: "Ocupación regional",
+      value: `${context.occupancy} en ${context.asOf}`,
+      note: "Sirve para medir qué tan tensionado o disponible está el mercado regional en habitaciones.",
+      asOf: context.asOf,
+      sourceTitle: context.regionSource.title,
+      sourceUrl: context.regionSource.url
+    },
+    {
+      label: "ADR regional",
+      value: `${context.adr} en ${context.asOf}`,
+      note: "Es la referencia oficial más útil para explicar el rango tarifario del destino a nivel regional.",
+      asOf: context.asOf,
+      sourceTitle: context.regionSource.title,
+      sourceUrl: context.regionSource.url
+    }
+  ];
+}
+
+function buildOfficialSepteEvidence(destinationId: HotelDestinationId): Partial<Record<HotelSepteFactorId, HotelEvidencePoint[]>> {
+  const context = DESTINATION_NUMERIC_CONTEXT[destinationId];
+
+  return {
+    social: [
+      {
+        label: "Turismo receptivo nacional",
+        value: "6.004.567 llegadas en 2025",
+        note: "La magnitud de turistas extranjeros que entran al país confirma una base real de demanda para destinos premium y de naturaleza.",
+        asOf: "Año 2025",
+        sourceTitle: CHILE_RECEPTIVE_TOURISM_SOURCE.title,
+        sourceUrl: CHILE_RECEPTIVE_TOURISM_SOURCE.url
+      },
+      {
+        label: "Pernoctaciones regionales",
+        value: `${context.pernoctations} en ${context.asOf}`,
+        note: "Mide la presión turística real sobre la región y ayuda a justificar el tamaño del flujo que podría capturar un hotel.",
+        asOf: context.asOf,
+        sourceTitle: context.regionSource.title,
+        sourceUrl: context.regionSource.url
+      }
+    ],
+    economic: [
+      {
+        label: "ADR regional",
+        value: `${context.adr} en ${context.asOf}`,
+        note: "Entrega una referencia dura del precio promedio diario que ya sostiene el mercado regional.",
+        asOf: context.asOf,
+        sourceTitle: context.regionSource.title,
+        sourceUrl: context.regionSource.url
+      },
+      {
+        label: "Ocupación regional",
+        value: `${context.occupancy} en ${context.asOf}`,
+        note: "Ayuda a estimar si el destino tiene un mercado tensionado o todavía con espacio para capturar demanda.",
+        asOf: context.asOf,
+        sourceTitle: context.regionSource.title,
+        sourceUrl: context.regionSource.url
+      }
+    ],
+    political: [
+      {
+        label: "Crecimiento del turismo receptivo",
+        value: "+14,6% en 2025 vs 2024",
+        note: "Muestra un entorno país con foco en conectividad y promoción turística, relevante para destinos que dependen del flujo internacional.",
+        asOf: "Año 2025",
+        sourceTitle: CHILE_RECEPTIVE_TOURISM_SOURCE.title,
+        sourceUrl: CHILE_RECEPTIVE_TOURISM_SOURCE.url
+      }
+    ],
+    technological: [
+      {
+        label: "Escala de la demanda turística",
+        value: "6.004.567 llegadas internacionales en 2025",
+        note: "Ese volumen de demanda refuerza la necesidad de conversión digital, motor de reservas y visibilidad online para capturar parte del flujo.",
+        asOf: "Año 2025",
+        sourceTitle: CHILE_RECEPTIVE_TOURISM_SOURCE.title,
+        sourceUrl: CHILE_RECEPTIVE_TOURISM_SOURCE.url
+      }
+    ],
+    ecological: [
+      {
+        label: "Volumen turístico regional",
+        value: `${context.pernoctations} pernoctaciones en ${context.asOf}`,
+        note: "Ese volumen cuantifica la presión que recibe el territorio y ayuda a justificar políticas de agua, energía y capacidad de carga.",
+        asOf: context.asOf,
+        sourceTitle: context.regionSource.title,
+        sourceUrl: context.regionSource.url
+      }
+    ],
+    legal: [
+      {
+        label: "Actividad regional de alojamiento",
+        value: `${context.pernoctations} pernoctaciones en ${context.asOf}`,
+        note: "Un volumen alto de pernoctaciones exige cumplimiento riguroso en habilitación, seguridad, alimentos, contratos y operación turística formal.",
+        asOf: context.asOf,
+        sourceTitle: context.regionSource.title,
+        sourceUrl: context.regionSource.url
+      }
+    ]
+  };
+}
+
+function buildDestinationSources(destinationId: HotelDestinationId, extraSources: ResearchSource[]): ResearchSource[] {
+  return [CHILE_RECEPTIVE_TOURISM_SOURCE, DESTINATION_NUMERIC_CONTEXT[destinationId].regionSource, ...extraSources].reduce<
+    ResearchSource[]
+  >((collected, source) => {
+    if (!source.url || collected.some((item) => item.url === source.url)) return collected;
+    collected.push(source);
+    return collected;
+  }, []);
+}
+
 export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestinationProfile> = {
   "patagonia-chilena": {
     id: "patagonia-chilena",
@@ -66,23 +278,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
       "Senderismo premium y observacion de fauna",
       "Experiencias gastronomicas y de wellness de destino"
     ],
-    touristStats: [
-      {
-        label: "Patron de demanda",
-        value: "Alta estacionalidad entre diciembre y marzo",
-        note: "La temporada alta concentra la mayor parte del flujo internacional de ocio."
-      },
-      {
-        label: "Mercado clave",
-        value: "Turismo internacional de naturaleza y aventura",
-        note: "El mercado premium valora experiencias guiadas, privacidad y todo incluido."
-      },
-      {
-        label: "Comportamiento tarifario",
-        value: "ADR alto con fuerte dependencia estacional",
-        note: "La disposicion a pagar crece cuando el hotel vende experiencia y no solo habitacion."
-      }
-    ],
+    touristStats: buildOfficialTouristStats("patagonia-chilena"),
     marketRateReference: {
       single: 430,
       double: 560,
@@ -95,42 +291,48 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         label: "Social",
         analysis:
           "El destino atrae viajeros de alto gasto que priorizan experiencia, paisaje y servicio personalizado por sobre la compra transaccional.",
-        implication: "El hotel debe operar con estandar alto de anfitrionia y relato de destino."
+        implication: "El hotel debe operar con estandar alto de anfitrionia y relato de destino.",
+        evidence: buildOfficialSepteEvidence("patagonia-chilena").social ?? []
       },
       {
         id: "economic",
         label: "Economico",
         analysis:
           "La demanda premium resiste tarifas elevadas, pero el costo logistico, de abastecimiento y personal presiona la rentabilidad.",
-        implication: "Se requiere una estrategia de revenue management con control fino de costos."
+        implication: "Se requiere una estrategia de revenue management con control fino de costos.",
+        evidence: buildOfficialSepteEvidence("patagonia-chilena").economic ?? []
       },
       {
         id: "political",
         label: "Politico",
         analysis:
           "La promocion publica del turismo de naturaleza favorece el destino, aunque la conectividad y la gestion territorial inciden en la experiencia.",
-        implication: "El hotel debe coordinarse con actores locales y anticipar restricciones operativas."
+        implication: "El hotel debe coordinarse con actores locales y anticipar restricciones operativas.",
+        evidence: buildOfficialSepteEvidence("patagonia-chilena").political ?? []
       },
       {
         id: "technological",
         label: "Tecnologico",
         analysis:
           "La reserva digital y el contenido visual son claves para captar demanda internacional antes de la llegada al destino.",
-        implication: "La venta directa necesita motor de reservas, CRM y marketing de contenido."
+        implication: "La venta directa necesita motor de reservas, CRM y marketing de contenido.",
+        evidence: buildOfficialSepteEvidence("patagonia-chilena").technological ?? []
       },
       {
         id: "ecological",
         label: "Ecologico",
         analysis:
           "La fragilidad ambiental y el valor paisajistico obligan a una operacion responsable en residuos, energia y excursionismo.",
-        implication: "La sostenibilidad es parte del producto y del argumento comercial."
+        implication: "La sostenibilidad es parte del producto y del argumento comercial.",
+        evidence: buildOfficialSepteEvidence("patagonia-chilena").ecological ?? []
       },
       {
         id: "legal",
         label: "Legal",
         analysis:
           "El marco de habilitacion, seguridad, transporte y excursionismo exige cumplimiento riguroso y gestion de proveedores.",
-        implication: "La propuesta debe considerar permisos, seguros y protocolos desde el diseno."
+        implication: "La propuesta debe considerar permisos, seguros y protocolos desde el diseno.",
+        evidence: buildOfficialSepteEvidence("patagonia-chilena").legal ?? []
       }
     ],
     competitionSummary:
@@ -164,7 +366,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         note: "Compite por arquitectura, gastronomia y experiencia patrimonial."
       }
     ],
-    sources: [
+    sources: buildDestinationSources("patagonia-chilena", [
       {
         title: "Torres del Paine y Patagonia en Chile Travel",
         url: "https://chile.travel/",
@@ -180,7 +382,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         url: "https://awasi.com/",
         note: "Base referencial para servicio ultra premium y venta experiencial."
       }
-    ]
+    ])
   },
   "puerto-varas": {
     id: "puerto-varas",
@@ -195,23 +397,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
       "Volcan Osorno",
       "Tours a Frutillar, Cochamo y Ruta de los Parques"
     ],
-    touristStats: [
-      {
-        label: "Llegadas a alojamiento",
-        value: "437.327 en primer semestre 2024",
-        note: "Dato referencial regional de Los Lagos reportado por INE."
-      },
-      {
-        label: "Ocupacion regional",
-        value: "35,3% acumulada primer semestre 2024",
-        note: "Senal de estacionalidad y margen de captura fuera de peak."
-      },
-      {
-        label: "ADR regional",
-        value: "CLP 74.867 primer semestre 2024",
-        note: "Base referencial regional, no exclusiva de lujo."
-      }
-    ],
+    touristStats: buildOfficialTouristStats("puerto-varas"),
     marketRateReference: {
       single: 220,
       double: 290,
@@ -224,42 +410,48 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         label: "Social",
         analysis:
           "El destino atrae parejas, familias y viajeros de escapada premium que combinan paisaje, gastronomia y descanso.",
-        implication: "El producto debe equilibrar experiencia, comodidad y consumo complementario."
+        implication: "El producto debe equilibrar experiencia, comodidad y consumo complementario.",
+        evidence: buildOfficialSepteEvidence("puerto-varas").social ?? []
       },
       {
         id: "economic",
         label: "Economico",
         analysis:
           "Puerto Varas tiene demanda estable, pero enfrenta sensibilidad tarifaria mayor que destinos ultra exclusivos.",
-        implication: "El ADR debe defenderse con valor agregado y buen mix de canales."
+        implication: "El ADR debe defenderse con valor agregado y buen mix de canales.",
+        evidence: buildOfficialSepteEvidence("puerto-varas").economic ?? []
       },
       {
         id: "political",
         label: "Politico",
         analysis:
           "La promocion regional y la infraestructura turistica consolidada apoyan el destino, aunque hay presion por conectividad y temporada.",
-        implication: "El hotel puede apoyarse en alianzas locales y calendario de eventos."
+        implication: "El hotel puede apoyarse en alianzas locales y calendario de eventos.",
+        evidence: buildOfficialSepteEvidence("puerto-varas").political ?? []
       },
       {
         id: "technological",
         label: "Tecnologico",
         analysis:
           "La comparacion digital de tarifas y reputacion online influye fuertemente en la compra.",
-        implication: "La gestion de reputacion y venta directa es critica."
+        implication: "La gestion de reputacion y venta directa es critica.",
+        evidence: buildOfficialSepteEvidence("puerto-varas").technological ?? []
       },
       {
         id: "ecological",
         label: "Ecologico",
         analysis:
           "El entorno lacustre y volcanico hace que la sostenibilidad y el paisajismo tengan peso comercial real.",
-        implication: "La propuesta debe mostrar responsabilidad ambiental y diseno coherente con el paisaje."
+        implication: "La propuesta debe mostrar responsabilidad ambiental y diseno coherente con el paisaje.",
+        evidence: buildOfficialSepteEvidence("puerto-varas").ecological ?? []
       },
       {
         id: "legal",
         label: "Legal",
         analysis:
           "Las exigencias de seguridad, alimentacion, piscinas, spa y eventos requieren cumplimiento operativo sostenido.",
-        implication: "La apertura necesita una hoja de ruta regulatoria clara."
+        implication: "La apertura necesita una hoja de ruta regulatoria clara.",
+        evidence: buildOfficialSepteEvidence("puerto-varas").legal ?? []
       }
     ],
     competitionSummary:
@@ -293,12 +485,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         note: "Compite por segmento corporativo y reuniones."
       }
     ],
-    sources: [
-      {
-        title: "INE Los Lagos Infografia Turismo 2024",
-        url: "https://regiones.ine.gob.cl/los-lagos/prensa/ine-los-lagos-publica-infograf%C3%ADa-de-turismo-segundo-semestre-2024",
-        note: "Referencia regional de llegadas, ocupacion y ADR."
-      },
+    sources: buildDestinationSources("puerto-varas", [
       {
         title: "Hotel AWA",
         url: "https://hotelawa.cl/",
@@ -309,7 +496,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         url: "https://www.cumbrespuertovaras.cl/",
         note: "Referencia de oferta premium urbana y de bienestar."
       }
-    ]
+    ])
   },
   villarrica: {
     id: "villarrica",
@@ -324,23 +511,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
       "Termas y wellness",
       "Aventura outdoor y parques nacionales"
     ],
-    touristStats: [
-      {
-        label: "Patron de demanda",
-        value: "Alta temporada verano e invierno",
-        note: "El destino trabaja muy bien vacaciones, escapadas y aventura."
-      },
-      {
-        label: "Mercado clave",
-        value: "Ocio nacional premium y viajeros internacionales de naturaleza",
-        note: "La propuesta debe combinar paisaje, descanso y actividades."
-      },
-      {
-        label: "Sensibilidad comercial",
-        value: "Media",
-        note: "El cliente paga por experiencia, pero compara intensamente en temporada alta."
-      }
-    ],
+    touristStats: buildOfficialTouristStats("villarrica"),
     marketRateReference: {
       single: 200,
       double: 265,
@@ -353,42 +524,48 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         label: "Social",
         analysis:
           "El destino combina turismo familiar, parejas y viajeros de experiencia, con valoracion alta por entorno, bienestar y actividades.",
-        implication: "El hotel debe vender paquetes y experiencia, no solo alojamiento."
+        implication: "El hotel debe vender paquetes y experiencia, no solo alojamiento.",
+        evidence: buildOfficialSepteEvidence("villarrica").social ?? []
       },
       {
         id: "economic",
         label: "Economico",
         analysis:
           "El mercado admite tarifas premium moderadas, pero la estacionalidad obliga a trabajar ocupacion fuera de peak.",
-        implication: "La estrategia comercial debe contemplar temporada alta y hombro."
+        implication: "La estrategia comercial debe contemplar temporada alta y hombro.",
+        evidence: buildOfficialSepteEvidence("villarrica").economic ?? []
       },
       {
         id: "political",
         label: "Politico",
         analysis:
           "La gestion del destino y la seguridad regional influyen en la percepcion de demanda.",
-        implication: "La comunicacion del hotel debe reforzar confianza y experiencia segura."
+        implication: "La comunicacion del hotel debe reforzar confianza y experiencia segura.",
+        evidence: buildOfficialSepteEvidence("villarrica").political ?? []
       },
       {
         id: "technological",
         label: "Tecnologico",
         analysis:
           "La conversion digital y la reputacion online pesan mucho en el proceso de reserva.",
-        implication: "La venta directa y la gestion de reviews son fundamentales."
+        implication: "La venta directa y la gestion de reviews son fundamentales.",
+        evidence: buildOfficialSepteEvidence("villarrica").technological ?? []
       },
       {
         id: "ecological",
         label: "Ecologico",
         analysis:
           "El activo principal es el paisaje natural y el acceso a aventura, por lo que la sostenibilidad suma valor.",
-        implication: "La operacion debe ser consistente con el relato de naturaleza."
+        implication: "La operacion debe ser consistente con el relato de naturaleza.",
+        evidence: buildOfficialSepteEvidence("villarrica").ecological ?? []
       },
       {
         id: "legal",
         label: "Legal",
         analysis:
           "Spa, termas, actividades y transporte requieren protocolos y gestion normativa consistente.",
-        implication: "La propuesta debe integrar operadores y cumplimiento desde el inicio."
+        implication: "La propuesta debe integrar operadores y cumplimiento desde el inicio.",
+        evidence: buildOfficialSepteEvidence("villarrica").legal ?? []
       }
     ],
     competitionSummary:
@@ -422,7 +599,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         note: "Referencia de escala, leisure y eventos."
       }
     ],
-    sources: [
+    sources: buildDestinationSources("villarrica", [
       {
         title: "Chile Travel - Araucania Lacustre",
         url: "https://chile.travel/",
@@ -438,7 +615,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         url: "https://www.parklake.cl/",
         note: "Referencia de resort premium con foco leisure."
       }
-    ]
+    ])
   },
   "san-pedro-de-atacama": {
     id: "san-pedro-de-atacama",
@@ -454,23 +631,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
       "Termas de Puritama",
       "Astroturismo y salares"
     ],
-    touristStats: [
-      {
-        label: "Ocupacion regional",
-        value: "52,3% febrero 2026",
-        note: "Senal regional de Antofagasta en temporada alta."
-      },
-      {
-        label: "ADR regional",
-        value: "CLP 87.974 febrero 2026",
-        note: "Dato regional de referencia para alojamiento, no exclusivo de lujo."
-      },
-      {
-        label: "Posicionamiento",
-        value: "Destino internacional premium de naturaleza",
-        note: "Soporta pricing alto cuando el producto integra experiencia y servicio."
-      }
-    ],
+    touristStats: buildOfficialTouristStats("san-pedro-de-atacama"),
     marketRateReference: {
       single: 310,
       double: 420,
@@ -483,42 +644,48 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         label: "Social",
         analysis:
           "La demanda busca experiencias memorables, excursionismo, astronomia y descanso premium en un entorno remoto.",
-        implication: "El hotel debe vender experiencia curada y no solo tarifa de habitacion."
+        implication: "El hotel debe vender experiencia curada y no solo tarifa de habitacion.",
+        evidence: buildOfficialSepteEvidence("san-pedro-de-atacama").social ?? []
       },
       {
         id: "economic",
         label: "Economico",
         analysis:
           "El destino soporta ADR alto, aunque la dependencia de intermediacion y el costo operativo pueden erosionar margen.",
-        implication: "La mezcla de canales debe migrar hacia venta directa y paquetes rentables."
+        implication: "La mezcla de canales debe migrar hacia venta directa y paquetes rentables.",
+        evidence: buildOfficialSepteEvidence("san-pedro-de-atacama").economic ?? []
       },
       {
         id: "political",
         label: "Politico",
         analysis:
           "La promocion internacional de Chile favorece el destino, pero su operacion depende de conectividad, acceso y coordinacion local.",
-        implication: "La planificacion comercial debe alinearse con vuelos, operadores y temporada."
+        implication: "La planificacion comercial debe alinearse con vuelos, operadores y temporada.",
+        evidence: buildOfficialSepteEvidence("san-pedro-de-atacama").political ?? []
       },
       {
         id: "technological",
         label: "Tecnologico",
         analysis:
           "La decision de compra se concentra en plataformas digitales, reputacion online y contenido inspiracional.",
-        implication: "El canal directo necesita una propuesta visual fuerte y conversion alta."
+        implication: "El canal directo necesita una propuesta visual fuerte y conversion alta.",
+        evidence: buildOfficialSepteEvidence("san-pedro-de-atacama").technological ?? []
       },
       {
         id: "ecological",
         label: "Ecologico",
         analysis:
           "El desierto y sus ecosistemas demandan uso responsable de agua, energia y excursionismo sostenible.",
-        implication: "La sostenibilidad debe estar integrada al modelo de operacion y marca."
+        implication: "La sostenibilidad debe estar integrada al modelo de operacion y marca.",
+        evidence: buildOfficialSepteEvidence("san-pedro-de-atacama").ecological ?? []
       },
       {
         id: "legal",
         label: "Legal",
         analysis:
           "La hoteleria premium con spa, gastronomia y tours asociados necesita protocolos claros, contratos y cumplimiento normativo.",
-        implication: "La apertura requiere una matriz de permisos y partners formalizada."
+        implication: "La apertura requiere una matriz de permisos y partners formalizada.",
+        evidence: buildOfficialSepteEvidence("san-pedro-de-atacama").legal ?? []
       }
     ],
     competitionSummary:
@@ -552,12 +719,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         note: "Referencia importante para precio y amenities premium."
       }
     ],
-    sources: [
-      {
-        title: "INE Antofagasta - Alojamiento Turistico",
-        url: "https://regiones.ine.gob.cl/antofagasta/prensa/las-pernoctaciones-en-establecimientos-de-alojamiento-tur%C3%ADstico-registraron-un-aumento-de-10-4-en-doce-meses",
-        note: "Referencia regional de ocupacion y ADR."
-      },
+    sources: buildDestinationSources("san-pedro-de-atacama", [
       {
         title: "Chile Travel - San Pedro de Atacama",
         url: "https://chile.travel/destinos/san-pedro-de-atacama/",
@@ -568,7 +730,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         url: "https://www.cumbressanpedro.com/en",
         note: "Base referencial de tarifas y propuesta de valor premium."
       }
-    ]
+    ])
   },
   papudo: {
     id: "papudo",
@@ -583,23 +745,7 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
       "Escapadas gastronomicas y wellness",
       "Conectividad con Zapallar, Maitencillo y la costa norte de Valparaiso"
     ],
-    touristStats: [
-      {
-        label: "Patron de demanda",
-        value: "Fuerte fin de semana y verano",
-        note: "La estacionalidad y la cercania a Santiago marcan el comportamiento comercial."
-      },
-      {
-        label: "Mercado clave",
-        value: "Escapada premium nacional",
-        note: "El cliente valora accesibilidad, vista mar, gastronomia y bienestar."
-      },
-      {
-        label: "Profundidad competitiva",
-        value: "Media-baja en lujo estricto",
-        note: "Puede exigir ampliar el benchmark al corredor costero premium."
-      }
-    ],
+    touristStats: buildOfficialTouristStats("papudo"),
     marketRateReference: {
       single: 180,
       double: 240,
@@ -612,42 +758,48 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         label: "Social",
         analysis:
           "La demanda se compone de escapadas, familias y parejas que buscan relajacion, vista y servicio por estadias cortas.",
-        implication: "La experiencia debe optimizar estadias breves y consumo complementario."
+        implication: "La experiencia debe optimizar estadias breves y consumo complementario.",
+        evidence: buildOfficialSepteEvidence("papudo").social ?? []
       },
       {
         id: "economic",
         label: "Economico",
         analysis:
           "El mercado premium costero soporta ADR medio-alto, pero con comparacion intensa entre propiedades y arriendos de segunda vivienda.",
-        implication: "La propuesta debe diferenciarse del alojamiento residencial."
+        implication: "La propuesta debe diferenciarse del alojamiento residencial.",
+        evidence: buildOfficialSepteEvidence("papudo").economic ?? []
       },
       {
         id: "political",
         label: "Politico",
         analysis:
           "La gestion costera, normas urbanas y desarrollo inmobiliario inciden en el ritmo de crecimiento de la oferta.",
-        implication: "El hotel necesita una lectura territorial y regulatoria detallada."
+        implication: "El hotel necesita una lectura territorial y regulatoria detallada.",
+        evidence: buildOfficialSepteEvidence("papudo").political ?? []
       },
       {
         id: "technological",
         label: "Tecnologico",
         analysis:
           "La compra se apoya en reputacion, comparadores y contenido visual de alta calidad.",
-        implication: "La distribucion online y la marca son decisivas."
+        implication: "La distribucion online y la marca son decisivas.",
+        evidence: buildOfficialSepteEvidence("papudo").technological ?? []
       },
       {
         id: "ecological",
         label: "Ecologico",
         analysis:
           "El valor del destino depende del borde costero, paisaje y uso responsable de recursos.",
-        implication: "La sostenibilidad y el diseno son atributos comerciales visibles."
+        implication: "La sostenibilidad y el diseno son atributos comerciales visibles.",
+        evidence: buildOfficialSepteEvidence("papudo").ecological ?? []
       },
       {
         id: "legal",
         label: "Legal",
         analysis:
           "La operacion hotelera costera puede enfrentar exigencias asociadas a urbanismo, seguridad, alimentos y actividades complementarias.",
-        implication: "La hoja de ruta legal debe trabajarse desde la fase de proyecto."
+        implication: "La hoja de ruta legal debe trabajarse desde la fase de proyecto.",
+        evidence: buildOfficialSepteEvidence("papudo").legal ?? []
       }
     ],
     competitionSummary:
@@ -681,23 +833,18 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
         note: "Usar como referencia cuando la oferta 5 estrellas estricta sea limitada."
       }
     ],
-    sources: [
+    sources: buildDestinationSources("papudo", [
       {
         title: "Chile Travel - Costa de Chile",
         url: "https://chile.travel/",
         note: "Referencia general de atractivos y turismo costero."
       },
       {
-        title: "Referencias hoteleras corredor premium costa norte",
-        url: "https://www.booking.com/",
-        note: "Base comparativa de mercado para tarifas y amenities costeros."
-      },
-      {
         title: "SERNATUR Region de Valparaiso",
         url: "https://www.sernatur.cl/",
         note: "Referencia institucional del destino y su oferta turistica."
       }
-    ]
+    ])
   }
 };
 
@@ -1026,6 +1173,11 @@ export function buildFallbackResearchReport(input: HotelCaseInput): HotelResearc
   const profile = HOTEL_DESTINATION_PROFILES[input.destination];
   const primarySource = profile.sources[0];
   const secondarySource = profile.sources[1] ?? profile.sources[0];
+  const destinationSource =
+    profile.sources.find((source) => {
+      const title = source.title.toLowerCase();
+      return !title.includes("subsecretar") && !title.includes("ine");
+    }) ?? profile.sources[0];
 
   return {
     destinationLabel: profile.label,
@@ -1039,8 +1191,8 @@ export function buildFallbackResearchReport(input: HotelCaseInput): HotelResearc
     attractions: profile.attractions.map<HotelAttraction>((attraction) => ({
       name: attraction,
       relevance: "Atractivo base del destino usado como referencia cuando no hay extracción grounded disponible.",
-      sourceTitle: primarySource?.title,
-      sourceUrl: primarySource?.url
+      sourceTitle: destinationSource?.title,
+      sourceUrl: destinationSource?.url
     })),
     touristStats: profile.touristStats.map((stat, index) => ({
       ...stat,

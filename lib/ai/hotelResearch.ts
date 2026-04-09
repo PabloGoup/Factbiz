@@ -339,7 +339,7 @@ function extractGroundingSources(response: unknown) {
     .slice(0, 8);
 }
 
-function normalizeSepte(septeFactors: HotelSepteFactor[]) {
+function normalizeSepte(septeFactors: HotelSepteFactor[], fallback: HotelSepteFactor[] = []) {
   const sanitizeEvidence = (evidence: HotelEvidencePoint[]) =>
     evidence.filter((item) => isUsableSourceUrl(item.sourceUrl)).slice(0, 2);
 
@@ -347,14 +347,22 @@ function normalizeSepte(septeFactors: HotelSepteFactor[]) {
 
   return order.map((id) => {
     const factor = septeFactors.find((item) => item.id === id);
+    const fallbackFactor = fallback.find((item) => item.id === id);
+    const sanitizedEvidence = sanitizeEvidence(factor?.evidence ?? []);
+    const fallbackEvidence = sanitizeEvidence(fallbackFactor?.evidence ?? []);
 
     return (
       (factor
         ? {
             ...factor,
-            evidence: sanitizeEvidence(factor.evidence ?? [])
+            evidence: sanitizedEvidence.length ? sanitizedEvidence : fallbackEvidence
           }
-        : null) ?? {
+        : fallbackFactor
+          ? {
+              ...fallbackFactor,
+              evidence: fallbackEvidence
+            }
+          : null) ?? {
         id,
         label: id.charAt(0).toUpperCase() + id.slice(1),
         analysis: "No se pudo generar una lectura especifica para este factor.",
@@ -372,6 +380,7 @@ function isUsableSourceUrl(url?: string) {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) return false;
     if (parsed.hostname === "example.com" || parsed.hostname.endsWith(".example.com")) return false;
+    if (parsed.hostname === "ejemplo.com" || parsed.hostname.endsWith(".ejemplo.com")) return false;
     if (parsed.hostname === "localhost" || parsed.hostname.endsWith(".local")) return false;
     return true;
   } catch {
@@ -380,25 +389,35 @@ function isUsableSourceUrl(url?: string) {
 }
 
 function normalizeTouristStats(input: HotelTouristStat[], fallback: HotelTouristStat[]) {
-  return input.slice(0, 5).map((stat, index) => ({
-    ...stat,
-    sourceTitle:
-      stat.sourceTitle && isUsableSourceUrl(stat.sourceUrl) ? stat.sourceTitle : fallback[index]?.sourceTitle,
-    sourceUrl: isUsableSourceUrl(stat.sourceUrl) ? stat.sourceUrl : fallback[index]?.sourceUrl
-  }));
+  if (!input.length) return fallback;
+
+  const officialBase = fallback.slice(0, 4);
+  const extraStats = input
+    .filter((stat) => isUsableSourceUrl(stat.sourceUrl) && /\d/.test(stat.value))
+    .filter((stat) => !officialBase.some((item) => item.label.toLowerCase() === stat.label.toLowerCase()))
+    .slice(0, Math.max(0, 5 - officialBase.length));
+
+  return [...officialBase, ...extraStats];
 }
 
 function normalizeAttractions(input: HotelAttraction[], fallback: HotelAttraction[]) {
   if (!input.length) return fallback;
 
-  return input.slice(0, 8).map((attraction, index) => ({
-    ...attraction,
-    sourceTitle:
-      attraction.sourceTitle && isUsableSourceUrl(attraction.sourceUrl)
-        ? attraction.sourceTitle
-        : fallback[index]?.sourceTitle,
-    sourceUrl: isUsableSourceUrl(attraction.sourceUrl) ? attraction.sourceUrl : fallback[index]?.sourceUrl
-  }));
+  return input.slice(0, 8).map((attraction, index) => {
+    const fallbackAttraction = fallback[index];
+    if (!isUsableSourceUrl(attraction.sourceUrl)) {
+      return fallbackAttraction ?? attraction;
+    }
+
+    return {
+      ...attraction,
+      sourceTitle:
+        attraction.sourceTitle && isUsableSourceUrl(attraction.sourceUrl)
+          ? attraction.sourceTitle
+          : fallbackAttraction?.sourceTitle,
+      sourceUrl: attraction.sourceUrl
+    };
+  });
 }
 
 function normalizeRates(input: HotelRoomRates, fallback: HotelRoomRates): HotelRoomRates {
@@ -729,12 +748,13 @@ Objetivo:
 - identificar competencia 5 estrellas o premium comparable
 - revisar servicios, instalaciones y tarifas de referencia
 - resumir atractivos principales del destino
-- identificar señales de demanda turistica y llegadas si hay fuentes visibles
+- identificar señales de demanda turistica con datos duros: turistas que entran a Chile, actividad o flujo regional, pernoctaciones, ocupacion y ADR cuando existan fuentes visibles
 - entregar insumos para un SEPTE y para una estrategia comercial hotelera
 
 Reglas:
 - prioriza fuentes oficiales, hoteles oficiales, organismos publicos y referencias turisticas confiables
 - si no encuentras una cifra exacta, explica la senal sin inventar y evita completar ese dato con aproximaciones falsas
+- si el contexto base ya trae una metrica oficial, úsala como mínimo y no la reemplaces por una cifra menos confiable
 - incorpora las tensiones entre ADR, ocupacion, canales y comisiones
 - cuando cites metricas, anota periodo exacto o fecha absoluta si esta disponible
 - mantente aplicado a este hotel y a enero/febrero 2027 como caso de forecast`;
@@ -784,7 +804,24 @@ Reglas:
         },
         referenciaDestino: {
           atractivosBase: profile.attractions.slice(0, 4),
-          tarifasBase: profile.marketRateReference
+          tarifasBase: profile.marketRateReference,
+          metricasOficialesBase: fallback.touristStats.map((stat) => ({
+            indicador: stat.label,
+            valor: stat.value,
+            fecha: stat.asOf,
+            fuente: stat.sourceTitle,
+            url: stat.sourceUrl
+          })),
+          evidenciaSepteBase: fallback.septeFactors.map((factor) => ({
+            factor: factor.label,
+            evidencia: (factor.evidence ?? []).map((item) => ({
+              label: item.label,
+              value: item.value,
+              asOf: item.asOf,
+              sourceTitle: item.sourceTitle,
+              sourceUrl: item.sourceUrl
+            }))
+          }))
         }
       },
       null,
@@ -810,32 +847,32 @@ Instrucciones:
 - septeFactors: exactamente 6 factores. analysis e implication deben ser breves y concretos. Cada factor debe incluir exactamente 1 evidencia con label, value, note, asOf, sourceTitle y sourceUrl.
 - competitionSummary: 2 o 3 frases, maximo 380 caracteres.
 - attractions: 4 a 6 items reales con name, relevance, sourceTitle y sourceUrl. Prioriza fuentes oficiales del destino.
-- touristStats: 3 o 4 metricas reales con label, value, note, asOf, sourceTitle y sourceUrl. Prioriza INE, Subsecretaria de Turismo, SERNATUR u organismos oficiales.
+- touristStats: 3 o 4 metricas reales con label, value, note, asOf, sourceTitle y sourceUrl. Deben incluir, cuando exista en el contexto, llegadas de turistas a Chile y volumen o desempeño turistico regional con pernoctaciones, ocupacion o ADR. Prioriza INE, Subsecretaria de Turismo, SERNATUR u organismos oficiales.
 - marketRateReference: estimacion util para el modelo, en USD.
 - competitors: exactamente 3 comparables premium o 5 estrellas. services y facilities maximo 4 items por lista. note breve.
 - strategicPlan: debe explicar metas, acciones y relacion entre canales, ADR y ocupacion con textos cortos.
+- Si el contexto base ya trae metrica oficial y fuente valida, preservala y usala dentro del JSON final.
 - Prioriza brevedad, claridad y JSON valido por sobre extension.`;
 
     const { parsed, warnings } = await generateStructuredHotelResearch(client, model, structuredPrompt, fallback);
+    const normalizedSepte = normalizeSepte(parsed.septeFactors, fallback.septeFactors);
+    const normalizedTouristStats = normalizeTouristStats(parsed.touristStats as HotelTouristStat[], fallback.touristStats);
+    const normalizedAttractions = normalizeAttractions(parsed.attractions as HotelAttraction[], fallback.attractions);
 
     return {
       destinationLabel: profile.label,
       destinationDiagnosis: parsed.destinationDiagnosis,
-      septeFactors: normalizeSepte(parsed.septeFactors),
+      septeFactors: normalizedSepte,
       competitionSummary: parsed.competitionSummary,
       competitors: normalizeCompetitors(parsed.competitors, fallback.competitors),
-      attractions: normalizeAttractions(parsed.attractions as HotelAttraction[], fallback.attractions),
-      touristStats: normalizeTouristStats(parsed.touristStats as HotelTouristStat[], fallback.touristStats),
+      attractions: normalizedAttractions,
+      touristStats: normalizedTouristStats,
       marketRateReference: normalizeRates(parsed.marketRateReference, fallback.marketRateReference),
       strategicPlan: parsed.strategicPlan as HotelStrategicPlan,
       sources: mergeSources(
         [
           ...groundedSources,
-          ...collectResearchSources(
-            normalizeSepte(parsed.septeFactors),
-            normalizeTouristStats(parsed.touristStats as HotelTouristStat[], fallback.touristStats),
-            normalizeAttractions(parsed.attractions as HotelAttraction[], fallback.attractions)
-          )
+          ...collectResearchSources(normalizedSepte, normalizedTouristStats, normalizedAttractions)
         ],
         fallback.sources
       ),
