@@ -251,7 +251,7 @@ export function ResultsDashboard() {
               />
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
                 <Bot className="h-3.5 w-3.5" />
-                {snapshot.insights.source === "gemini" ? "Insights con Gemini" : "Simulación local"}
+                {snapshot.insights.source === "gemini" ? "Insights" : "Simulación local"}
               </div>
             </div>
             {insightMessage ? (
@@ -364,7 +364,7 @@ export function ResultsDashboard() {
       <div className="mt-5">
         <Card className="p-5">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-            {snapshot.insights.source === "gemini" ? "Hallazgos con Gemini" : "Hallazgos tipo IA"}
+            {snapshot.insights.source === "gemini" ? "Hallazgos" : "Hallazgos tipo IA"}
           </p>
             <div className="mt-4 space-y-4">
             <div>

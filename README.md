@@ -79,7 +79,7 @@ npm install
 npm run build
 ```
 
-No requiere variables de entorno para esta versión del prototipo.
+Para la versión base no requiere variables de entorno.
 
 Si quieres usar la experiencia conversacional con Gemini real, agrega:
 
@@ -87,6 +87,33 @@ Si quieres usar la experiencia conversacional con Gemini real, agrega:
 GEMINI_API_KEY=tu_api_key
 GEMINI_MODEL=gemini-2.5-flash-lite
 ```
+
+Si quieres usar biblioteca persistente de casos hoteleros con Supabase, agrega además:
+
+```bash
+SUPABASE_URL=tu_project_url
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+```
+
+## Biblioteca de casos hoteleros con Supabase
+
+El módulo `/casos-hoteleros` ya puede:
+
+- guardar un caso en base de datos con `Guardar caso`
+- listar casos guardados
+- cargar un caso guardado de vuelta al formulario
+- comparar dos casos resueltos
+
+La tabla esperada en Supabase está documentada en:
+
+- `data/hotel_cases_supabase.sql`
+
+Pasos recomendados:
+
+1. Crea un proyecto en Supabase.
+2. Ejecuta el SQL de `data/hotel_cases_supabase.sql` en el editor SQL.
+3. Configura `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en `.env.local` y en Vercel.
+4. Reinicia `npm run dev`.
 
 ## Informe PDF
 

@@ -17,6 +17,7 @@ import {
   MapPinned,
   ReceiptText,
   RefreshCcw,
+  Save,
   Sparkles,
   Target
 } from "lucide-react";
@@ -45,16 +46,19 @@ import {
   setStoredHotelCase,
   setStoredHotelResult
 } from "@/lib/storage";
+import { printCurrentPage } from "@/lib/report/export";
 import type {
   HotelBenchmarkReport,
   HotelBenchmarkSearchInput,
   HotelCaseInput,
   HotelCaseResult,
   HotelReferenceHotel,
-  HotelSalesChannelId
+  HotelSalesChannelId,
+  SavedHotelCaseListItem,
+  SavedHotelCaseRecord
 } from "@/types";
 
-type HotelWorkbenchTab = "benchmarks" | "case" | "research" | "forecast" | "strategy";
+type HotelWorkbenchTab = "saved" | "benchmarks" | "case" | "research" | "forecast" | "strategy";
 
 const ROOM_TYPE_ORDER = ["single", "double", "triple", "suite"] as const;
 const CHANNEL_ORDER = ["tourOperators", "onlineAgencies", "direct", "corporate"] as const;
@@ -84,6 +88,13 @@ function formatPercent(value: number) {
   return `${new Intl.NumberFormat("es-419", {
     maximumFractionDigits: 1
   }).format(value)}%`;
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("es-CL", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
 }
 
 function downloadHotelResult(result: HotelCaseResult) {
@@ -321,10 +332,22 @@ export function HotelCaseWorkbench() {
   const [benchmarkLoading, setBenchmarkLoading] = useState(false);
   const [benchmarkError, setBenchmarkError] = useState<string | null>(null);
   const [result, setResult] = useState<HotelCaseResult | null>(null);
+  const [currentSavedCaseId, setCurrentSavedCaseId] = useState<string | null>(null);
+  const [savedCases, setSavedCases] = useState<SavedHotelCaseListItem[]>([]);
+  const [savedCasesLoading, setSavedCasesLoading] = useState(false);
+  const [savedCasesError, setSavedCasesError] = useState<string | null>(null);
+  const [savedCasesQuery, setSavedCasesQuery] = useState("");
+  const [savedCasesDestination, setSavedCasesDestination] = useState<HotelCaseInput["destination"] | "">("");
+  const [savingCase, setSavingCase] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+  const [compareRecords, setCompareRecords] = useState<SavedHotelCaseRecord[]>([]);
+  const [compareLoading, setCompareLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<HotelWorkbenchTab>("benchmarks");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   useEffect(() => {
     const storedCase = getStoredHotelCase(createDefaultHotelCase());
@@ -354,6 +377,167 @@ export function HotelCaseWorkbench() {
     if (!hydrated) return;
     setStoredHotelBenchmarkFilters(benchmarkFilters);
   }, [benchmarkFilters, hydrated]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleBeforePrint = () => setIsPrinting(true);
+    const handleAfterPrint = () => setIsPrinting(false);
+
+    window.addEventListener("beforeprint", handleBeforePrint);
+    window.addEventListener("afterprint", handleAfterPrint);
+
+    return () => {
+      window.removeEventListener("beforeprint", handleBeforePrint);
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setSavedCasesLoading(true);
+    setSavedCasesError(null);
+
+    void fetch("/api/hotel-cases")
+      .then(async (response) => {
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "No fue posible cargar los casos guardados.");
+        }
+
+        setSavedCases(payload.items as SavedHotelCaseListItem[]);
+      })
+      .catch((currentError) => {
+        setSavedCasesError(currentError instanceof Error ? currentError.message : "No fue posible cargar los casos guardados.");
+      })
+      .finally(() => {
+        setSavedCasesLoading(false);
+      });
+  }, [hydrated]);
+
+  const loadSavedCases = async (filters?: { query?: string; destination?: HotelCaseInput["destination"] | "" }) => {
+    setSavedCasesLoading(true);
+    setSavedCasesError(null);
+
+    try {
+      const params = new URLSearchParams();
+      const query = filters?.query ?? savedCasesQuery;
+      const destination = filters?.destination ?? savedCasesDestination;
+
+      if (query.trim()) params.set("q", query.trim());
+      if (destination) params.set("destination", destination);
+
+      const response = await fetch(`/api/hotel-cases${params.toString() ? `?${params.toString()}` : ""}`);
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "No fue posible cargar los casos guardados.");
+      }
+
+      setSavedCases(payload.items as SavedHotelCaseListItem[]);
+    } catch (currentError) {
+      setSavedCasesError(currentError instanceof Error ? currentError.message : "No fue posible cargar los casos guardados.");
+    } finally {
+      setSavedCasesLoading(false);
+    }
+  };
+
+  const saveCurrentCase = async () => {
+    setSavingCase(true);
+    setSaveMessage(null);
+    setSavedCasesError(null);
+
+    try {
+      const isUpdating = Boolean(currentSavedCaseId);
+      const response = await fetch(currentSavedCaseId ? `/api/hotel-cases/${currentSavedCaseId}` : "/api/hotel-cases", {
+        method: currentSavedCaseId ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          input: hotelCase,
+          result
+        })
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "No fue posible guardar el caso hotelero.");
+      }
+
+      const savedRecord = payload as SavedHotelCaseRecord;
+      setCurrentSavedCaseId(savedRecord.id);
+      setSaveMessage(
+        isUpdating
+          ? result
+            ? "Caso resuelto actualizado en la base de datos."
+            : "Borrador actualizado en la base de datos."
+          : result
+            ? "Caso resuelto guardado en la base de datos."
+            : "Borrador del caso guardado en la base de datos."
+      );
+      await loadSavedCases();
+      setActiveTab("saved");
+    } catch (currentError) {
+      setSavedCasesError(currentError instanceof Error ? currentError.message : "No fue posible guardar el caso hotelero.");
+    } finally {
+      setSavingCase(false);
+    }
+  };
+
+  const loadSavedCaseIntoWorkbench = async (id: string) => {
+    setCompareLoading(true);
+    setSavedCasesError(null);
+
+    try {
+      const response = await fetch(`/api/hotel-cases/${id}`);
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "No fue posible cargar el caso guardado.");
+      }
+
+      const record = payload as SavedHotelCaseRecord;
+      setCurrentSavedCaseId(record.id);
+      setHotelCase(record.caseInput);
+      setResult(record.caseResult);
+      setActiveTab(record.caseResult ? "research" : "case");
+      setSaveMessage(`Se cargó ${record.hotelName} desde la base de datos.`);
+    } catch (currentError) {
+      setSavedCasesError(currentError instanceof Error ? currentError.message : "No fue posible cargar el caso guardado.");
+    } finally {
+      setCompareLoading(false);
+    }
+  };
+
+  const runCaseComparison = async (ids: string[]) => {
+    if (ids.length !== 2) {
+      setCompareRecords([]);
+      return;
+    }
+
+    setCompareLoading(true);
+    setSavedCasesError(null);
+
+    try {
+      const responses = await Promise.all(ids.map((id) => fetch(`/api/hotel-cases/${id}`)));
+      const payloads = await Promise.all(responses.map((response) => response.json()));
+
+      const failed = responses.findIndex((response) => !response.ok);
+      if (failed >= 0) {
+        throw new Error(payloads[failed].error ?? "No fue posible comparar los casos guardados.");
+      }
+
+      setCompareRecords(payloads as SavedHotelCaseRecord[]);
+    } catch (currentError) {
+      setSavedCasesError(currentError instanceof Error ? currentError.message : "No fue posible comparar los casos guardados.");
+      setCompareRecords([]);
+    } finally {
+      setCompareLoading(false);
+    }
+  };
 
   const updateCase = <K extends keyof HotelCaseInput>(key: K, value: HotelCaseInput[K]) => {
     setHotelCase((current) => ({
@@ -568,7 +752,8 @@ export function HotelCaseWorkbench() {
     subtitle: string;
     icon: ComponentType<{ className?: string }>;
   }> = [
-    { id: "benchmarks", label: "0. Buscar Benchmark", subtitle: "Comparativa con Gemini", icon: FileSearch },
+    { id: "saved", label: "Biblioteca", subtitle: "Casos guardados y comparación", icon: Building2 },
+    { id: "benchmarks", label: "0. Buscar Benchmark", subtitle: "Comparativa", icon: FileSearch },
     { id: "case", label: "1. Preparar Caso", subtitle: "Datos base del proyecto", icon: Hotel },
     { id: "research", label: "2. Entender Mercado", subtitle: "Destino, competencia y fuentes", icon: BookOpenText },
     { id: "forecast", label: "3. Ver Numeros", subtitle: "Ocupacion, ADR y comisiones", icon: ReceiptText },
@@ -581,7 +766,7 @@ export function HotelCaseWorkbench() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div className="no-print mb-8 flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-4xl">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
             Modulo especializado
@@ -596,6 +781,10 @@ export function HotelCaseWorkbench() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" onClick={() => void saveCurrentCase()} disabled={savingCase}>
+            {savingCase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            {currentSavedCaseId ? "Actualizar caso" : "Guardar caso"}
+          </Button>
           <Button
             variant="secondary"
             onClick={() => {
@@ -612,6 +801,7 @@ export function HotelCaseWorkbench() {
               setBenchmarkResult(null);
               setBenchmarkError(null);
               setResult(null);
+              setCurrentSavedCaseId(null);
               setError(null);
               setActiveTab("benchmarks");
             }}
@@ -619,6 +809,12 @@ export function HotelCaseWorkbench() {
             <Sparkles className="mr-2 h-4 w-4" />
             Cargar ejemplo docente
           </Button>
+          {result ? (
+            <Button variant="secondary" onClick={() => printCurrentPage(result.input.hotelName)}>
+              <Download className="mr-2 h-4 w-4" />
+              Descargar PDF completo
+            </Button>
+          ) : null}
           {result ? (
             <Button variant="secondary" onClick={() => downloadHotelResult(result)}>
               <Download className="mr-2 h-4 w-4" />
@@ -628,7 +824,18 @@ export function HotelCaseWorkbench() {
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      {saveMessage ? (
+        <div className="no-print mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+          {saveMessage}
+        </div>
+      ) : null}
+      {savedCasesError ? (
+        <div className="no-print mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          {savedCasesError}
+        </div>
+      ) : null}
+
+      <div className="no-print mb-6 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="p-5 sm:p-6">
           <SectionIntro
             title="Como funciona este modulo"
@@ -679,11 +886,11 @@ export function HotelCaseWorkbench() {
         </Card>
       </div>
 
-      <Card className="mb-6 p-4">
+      <Card className="no-print mb-6 p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {tabs.map((tab) => {
             const Icon = tab.icon;
-            const disabled = tab.id !== "benchmarks" && tab.id !== "case" && !result;
+            const disabled = tab.id !== "saved" && tab.id !== "benchmarks" && tab.id !== "case" && !result;
 
             return (
               <button
@@ -710,12 +917,269 @@ export function HotelCaseWorkbench() {
         </div>
       </Card>
 
+      {activeTab === "saved" ? (
+        <div className="no-print space-y-6">
+          <Card>
+            <SectionIntro
+              title="Biblioteca de casos guardados"
+              description="Aquí queda tu base estándar de casos hoteleros. Puedes buscar por nombre o destino, volver a cargar un caso al formulario y comparar dos casos resueltos lado a lado."
+            />
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_auto]">
+              <FormField label="Buscar caso" hint="Nombre, región o país">
+                <Input value={savedCasesQuery} onChange={(event) => setSavedCasesQuery(event.target.value)} placeholder="Ej. Atacama" />
+              </FormField>
+              <FormField label="Destino" hint="Filtro opcional">
+                <Select
+                  value={savedCasesDestination}
+                  onChange={(event) => setSavedCasesDestination(event.target.value as HotelCaseInput["destination"] | "")}
+                >
+                  <option value="">Todos los destinos</option>
+                  {HOTEL_DESTINATION_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+              <div className="flex items-end gap-3">
+                <Button onClick={() => void loadSavedCases()} disabled={savedCasesLoading}>
+                  {savedCasesLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
+                  Actualizar biblioteca
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <Card>
+              <SectionIntro
+                title="Casos disponibles"
+                description="Selecciona uno para cargarlo o marca dos casos resueltos para compararlos."
+              />
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th className="pb-3">Comparar</th>
+                      <th className="pb-3">Caso</th>
+                      <th className="pb-3">Destino</th>
+                      <th className="pb-3">Estado</th>
+                      <th className="pb-3">ADR</th>
+                      <th className="pb-3">Actualizado</th>
+                      <th className="pb-3">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {savedCases.map((item) => {
+                      const isChecked = selectedCompareIds.includes(item.id);
+                      const isLoaded = currentSavedCaseId === item.id;
+
+                      return (
+                        <tr
+                          key={item.id}
+                          className={`border-t border-slate-200 dark:border-slate-800 ${
+                            isLoaded ? "bg-slate-50 dark:bg-slate-900" : ""
+                          }`}
+                        >
+                          <td className="py-3">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={item.status !== "solved" && !isChecked}
+                              onChange={(event) => {
+                                const nextIds = event.target.checked
+                                  ? [...selectedCompareIds, item.id].slice(-2)
+                                  : selectedCompareIds.filter((currentId) => currentId !== item.id);
+                                setSelectedCompareIds(nextIds);
+                                void runCaseComparison(nextIds);
+                              }}
+                            />
+                          </td>
+                          <td className="py-3">
+                            <p className="font-medium text-slate-900 dark:text-slate-50">{item.hotelName}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {item.category} · {item.region}
+                              {isLoaded ? " · caso cargado" : ""}
+                            </p>
+                          </td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">
+                            {HOTEL_DESTINATION_PROFILES[item.destination].label}
+                          </td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{item.status === "solved" ? "Resuelto" : "Borrador"}</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">
+                            {typeof item.weightedAverageAdr === "number" ? formatUsd(item.weightedAverageAdr) : "Sin resolver"}
+                          </td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatDateTime(item.updatedAt)}</td>
+                          <td className="py-3">
+                            <Button variant="secondary" onClick={() => void loadSavedCaseIntoWorkbench(item.id)} disabled={compareLoading}>
+                              Cargar
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {!savedCases.length ? (
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                  Aún no hay casos guardados en la base de datos. Guarda tu primer caso con el botón `Guardar caso`.
+                </div>
+              ) : null}
+            </Card>
+
+            <Card>
+              <SectionIntro
+                title="Comparación rápida"
+                description="Cuando selecciones dos casos resueltos, la app mostrará aquí una comparación ejecutiva."
+              />
+              {compareLoading ? (
+                <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando comparación...
+                </div>
+              ) : compareRecords.length === 2 ? (
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {compareRecords.map((record) => (
+                      <Highlight
+                        key={record.id}
+                        title={record.hotelName}
+                        text={`${HOTEL_DESTINATION_PROFILES[record.destination].label} · ADR ${formatUsd(
+                          record.caseResult?.summary.weightedAverageAdr ?? 0
+                        )} · Canal rentable ${record.caseResult ? HOTEL_CHANNEL_LABELS[record.caseResult.summary.mostProfitableChannel] : "Sin resolver"}`}
+                        tone="emerald"
+                      />
+                    ))}
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Highlight
+                      title="Lectura comparativa"
+                      text={`${
+                        (compareRecords[0].caseResult?.summary.weightedAverageAdr ?? 0) >=
+                        (compareRecords[1].caseResult?.summary.weightedAverageAdr ?? 0)
+                          ? compareRecords[0].hotelName
+                          : compareRecords[1].hotelName
+                      } lidera en ADR, mientras ${
+                        (compareRecords[0].caseResult?.summary.totalNetRoomRevenue ?? 0) >=
+                        (compareRecords[1].caseResult?.summary.totalNetRoomRevenue ?? 0)
+                          ? compareRecords[0].hotelName
+                          : compareRecords[1].hotelName
+                      } lidera en ingreso neto total.`}
+                    />
+                    <Highlight
+                      title="Uso recomendado"
+                      text="Usa esta comparación para decidir qué caso sostiene mejor tarifa, cuál controla mejor las comisiones y qué propuesta comercial conviene replicar o ajustar."
+                      tone="slate"
+                    />
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="text-slate-500 dark:text-slate-400">
+                        <tr>
+                          <th className="pb-3">Indicador</th>
+                          <th className="pb-3">{compareRecords[0].hotelName}</th>
+                          <th className="pb-3">{compareRecords[1].hotelName}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="py-3 font-medium text-slate-900 dark:text-slate-50">ADR proyectado</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(compareRecords[0].caseResult?.summary.weightedAverageAdr ?? 0)}</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(compareRecords[1].caseResult?.summary.weightedAverageAdr ?? 0)}</td>
+                        </tr>
+                        <tr className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="py-3 font-medium text-slate-900 dark:text-slate-50">Meta ADR cumplida</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">
+                            {compareRecords[0].caseResult?.summary.adrTargetMet ? "Sí" : "No"}
+                          </td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">
+                            {compareRecords[1].caseResult?.summary.adrTargetMet ? "Sí" : "No"}
+                          </td>
+                        </tr>
+                        <tr className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="py-3 font-medium text-slate-900 dark:text-slate-50">Ingreso neto habitaciones</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(compareRecords[0].caseResult?.summary.totalNetRoomRevenue ?? 0)}</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(compareRecords[1].caseResult?.summary.totalNetRoomRevenue ?? 0)}</td>
+                        </tr>
+                        <tr className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="py-3 font-medium text-slate-900 dark:text-slate-50">Comisiones totales</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(compareRecords[0].caseResult?.summary.totalCommissions ?? 0)}</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(compareRecords[1].caseResult?.summary.totalCommissions ?? 0)}</td>
+                        </tr>
+                        <tr className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="py-3 font-medium text-slate-900 dark:text-slate-50">Delta desayuno</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(compareRecords[0].caseResult?.summary.totalBreakfastDelta ?? 0)}</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(compareRecords[1].caseResult?.summary.totalBreakfastDelta ?? 0)}</td>
+                        </tr>
+                        <tr className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="py-3 font-medium text-slate-900 dark:text-slate-50">Canal más rentable</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">
+                            {compareRecords[0].caseResult ? HOTEL_CHANNEL_LABELS[compareRecords[0].caseResult.summary.mostProfitableChannel] : "Sin resolver"}
+                          </td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">
+                            {compareRecords[1].caseResult ? HOTEL_CHANNEL_LABELS[compareRecords[1].caseResult.summary.mostProfitableChannel] : "Sin resolver"}
+                          </td>
+                        </tr>
+                        <tr className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="py-3 font-medium text-slate-900 dark:text-slate-50">Mayor aporte neto</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">
+                            {compareRecords[0].caseResult ? HOTEL_CHANNEL_LABELS[compareRecords[0].caseResult.summary.largestNetContributor] : "Sin resolver"}
+                          </td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">
+                            {compareRecords[1].caseResult ? HOTEL_CHANNEL_LABELS[compareRecords[1].caseResult.summary.largestNetContributor] : "Sin resolver"}
+                          </td>
+                        </tr>
+                        <tr className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="py-3 font-medium text-slate-900 dark:text-slate-50">Ocupación enero</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(compareRecords[0].caseInput.occupancyJanuary)}</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(compareRecords[1].caseInput.occupancyJanuary)}</td>
+                        </tr>
+                        <tr className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="py-3 font-medium text-slate-900 dark:text-slate-50">Ocupación febrero</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(compareRecords[0].caseInput.occupancyFebruary)}</td>
+                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(compareRecords[1].caseInput.occupancyFebruary)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {compareRecords.map((record) => (
+                      <Card key={`recommendations-${record.id}`} className="p-5">
+                        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                          Recomendaciones clave
+                        </p>
+                        <h3 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">{record.hotelName}</h3>
+                        <div className="mt-4 grid gap-3">
+                          {(record.caseResult?.summary.recommendations ?? []).slice(0, 3).map((recommendation) => (
+                            <Highlight
+                              key={`${record.id}-${recommendation.title}`}
+                              title={recommendation.title}
+                              text={recommendation.text}
+                              tone={recommendation.tone ?? "emerald"}
+                            />
+                          ))}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                  Marca dos casos resueltos para compararlos aquí. Si cargas uno de ellos al formulario, puedes seguir editándolo con las pestañas normales del módulo.
+                </div>
+              )}
+            </Card>
+          </div>
+        </div>
+      ) : null}
+
       {activeTab === "benchmarks" ? (
-        <div className="space-y-6">
+        <div className="no-print space-y-6">
           <Card>
             <SectionIntro
               step="Paso 0"
-              title="Búsqueda comparativa con Gemini"
+              title="Búsqueda comparativa"
               description="Aquí haces la búsqueda competitiva antes de armar el caso. Gemini investiga la zona, propone comparables y organiza la salida para revisar tarifas, tipo de hotel y opciones de diferenciación."
             />
             <HelperDetails title="¿Cómo usar esta pestaña?" defaultOpen>
@@ -752,7 +1216,7 @@ export function HotelCaseWorkbench() {
                   </Button>
                   <Button onClick={() => void runBenchmarkSearch()} disabled={benchmarkLoading || benchmarkFilters.region.trim().length < 2}>
                     {benchmarkLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileSearch className="mr-2 h-4 w-4" />}
-                    Buscar con Gemini
+                    Buscar
                   </Button>
                 </div>
               </div>
@@ -821,7 +1285,7 @@ export function HotelCaseWorkbench() {
                       Resultado del benchmark
                     </p>
                     <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                      {benchmarkResult.mode === "gemini" ? "Comparativa construida con Gemini" : "Comparativa base del módulo"}
+                      {benchmarkResult.mode === "gemini" ? "Comparativa construida" : "Comparativa base del módulo"}
                     </h2>
                     <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                       {benchmarkResult.overview}
@@ -998,7 +1462,7 @@ export function HotelCaseWorkbench() {
           ) : (
             <Card>
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                Completa al menos la región y ejecuta la búsqueda con Gemini. Cuando lleguen los resultados, esta pestaña mostrará la comparativa en tablas, la lectura del benchmark y un botón para usar uno de los hoteles como base del caso.
+                Completa al menos la región y ejecuta la búsqueda. Cuando lleguen los resultados, esta pestaña mostrará la comparativa en tablas, la lectura del benchmark y un botón para usar uno de los hoteles como base del caso.
               </div>
             </Card>
           )}
@@ -1006,7 +1470,7 @@ export function HotelCaseWorkbench() {
       ) : null}
 
       {activeTab === "case" ? (
-        <div className="space-y-6">
+        <div className="no-print space-y-6">
           <Card>
             <SectionIntro
               step="Paso 1"
@@ -1304,6 +1768,7 @@ export function HotelCaseWorkbench() {
                   onClick={() => {
                     setHotelCase(createDefaultHotelCase());
                     setResult(null);
+                    setCurrentSavedCaseId(null);
                     setError(null);
                   }}
                 >
@@ -1400,8 +1865,24 @@ export function HotelCaseWorkbench() {
         </div>
       ) : null}
 
-      {activeTab === "research" && result ? (
-        <div className="space-y-6">
+      {result ? (
+        <div className={activeTab === "research" ? "space-y-6" : "hidden print:block print:space-y-6"}>
+          <div className="print-only report-page-break mb-6 rounded-3xl border border-slate-200 bg-white p-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Informe hotelero completo</p>
+            <h1 className="mt-2 text-3xl font-semibold text-slate-950">{result.input.hotelName}</h1>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              {HOTEL_DESTINATION_PROFILES[result.input.destination].label}
+              {" · "}
+              {result.input.region}
+              {" · "}
+              {result.input.country}
+            </p>
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <SummaryMetric label="ADR proyectado" value={formatUsd(result.summary.weightedAverageAdr)} helper="Tarifa promedio del caso resuelto." />
+              <SummaryMetric label="Meta ADR" value={formatUsd(result.input.targetAverageRate)} helper="Objetivo mensual definido por gerencia." />
+              <SummaryMetric label="Canal mas rentable" value={HOTEL_CHANNEL_LABELS[result.summary.mostProfitableChannel]} helper="Canal con mejor retorno neto relativo." />
+            </div>
+          </div>
           <Card>
             <SectionIntro
               title="El mercado explicado en simple"
@@ -1409,7 +1890,7 @@ export function HotelCaseWorkbench() {
             />
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
               <Sparkles className="h-3.5 w-3.5" />
-              {result.research.mode === "gemini" ? "Investigacion con Gemini" : "Fallback local"}
+              {result.research.mode === "gemini" ? "Investigacion" : "Fallback local"}
             </div>
             <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
               {result.research.destinationDiagnosis}
@@ -1540,8 +2021,10 @@ export function HotelCaseWorkbench() {
         </div>
       ) : null}
 
-      {activeTab === "forecast" && result ? (
-        <div className="space-y-6">
+      {result ? (
+        <div
+          className={activeTab === "forecast" ? "space-y-6" : "hidden print:block print:space-y-6"}
+        >
           <Card>
             <SectionIntro
               title="Panel operativo del caso"
@@ -1612,8 +2095,8 @@ export function HotelCaseWorkbench() {
           {result.monthlyForecasts.map((month, index) => (
             <details
               key={month.month}
-              open={index === 0}
-              className="rounded-3xl border border-slate-200 bg-white/80 p-0 dark:border-slate-800 dark:bg-slate-950/70"
+              open={isPrinting || index === 0}
+              className="report-page-break rounded-3xl border border-slate-200 bg-white/80 p-0 dark:border-slate-800 dark:bg-slate-950/70 print:block"
             >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 marker:content-none">
                 <div>
@@ -1910,8 +2393,8 @@ export function HotelCaseWorkbench() {
         </div>
       ) : null}
 
-      {activeTab === "strategy" && result ? (
-        <div className="space-y-6">
+      {result ? (
+        <div className={activeTab === "strategy" ? "space-y-6" : "hidden print:block print:space-y-6"}>
           <Card>
             <SectionIntro
               title="Conclusion y plan de accion"
@@ -2004,7 +2487,12 @@ export function HotelCaseWorkbench() {
               />
               <div className="grid gap-3">
                 {result.summary.recommendations.map((recommendation) => (
-                  <Highlight key={recommendation} title="Recomendacion" text={recommendation} tone="emerald" />
+                  <Highlight
+                    key={`${recommendation.title}-${recommendation.text}`}
+                    title={recommendation.title}
+                    text={recommendation.text}
+                    tone={recommendation.tone ?? "emerald"}
+                  />
                 ))}
               </div>
             </Card>

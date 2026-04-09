@@ -4,6 +4,7 @@ import type {
   HotelCaseResult,
   HotelChannelResult,
   HotelMonthlyForecast,
+  HotelRecommendation,
   HotelRoomMix,
   HotelSalesChannelId
 } from "@/types";
@@ -129,6 +130,28 @@ function aggregatedChannelMetrics(monthlyForecasts: HotelMonthlyForecast[]) {
   return aggregate;
 }
 
+const CHANNEL_LABELS: Record<HotelSalesChannelId, string> = {
+  tourOperators: "tour operadores",
+  onlineAgencies: "agencias online",
+  direct: "venta directa",
+  corporate: "empresas"
+};
+
+const ROOM_TYPE_LABELS = {
+  single: "Single",
+  double: "Doble",
+  triple: "Triple",
+  suite: "Suite"
+} as const;
+
+function uniqueRecommendations(recommendations: HotelRecommendation[]) {
+  return recommendations.reduce<HotelRecommendation[]>((collected, item) => {
+    if (collected.some((current) => current.title === item.title || current.text === item.text)) return collected;
+    collected.push(item);
+    return collected;
+  }, []);
+}
+
 function buildWarnings(input: HotelCaseInput, weightedAverageAdr: number) {
   const warnings: string[] = [];
   const roomMixTotal = sumRoomMix(input.roomMix);
@@ -163,33 +186,87 @@ function buildWarnings(input: HotelCaseInput, weightedAverageAdr: number) {
   return warnings;
 }
 
-function buildRecommendations(input: HotelCaseInput, weightedAverageAdr: number) {
+function buildRecommendations(
+  input: HotelCaseInput,
+  monthlyForecasts: HotelMonthlyForecast[],
+  weightedAverageAdr: number,
+  mostProfitableChannel: HotelSalesChannelId,
+  largestNetContributor: HotelSalesChannelId
+) {
   const destination = HOTEL_DESTINATION_PROFILES[input.destination];
-  const recommendations: string[] = [];
+  const recommendations: HotelRecommendation[] = [];
+  const totalBreakfastDelta = monthlyForecasts.reduce((sum, month) => sum + month.breakfastRevenueDelta, 0);
+  const averageOccupancy = monthlyForecasts.reduce((sum, month) => sum + month.occupancyRate, 0) / monthlyForecasts.length;
+  const firstMonth = monthlyForecasts[0];
+  const lowestNetAdrChannel = monthlyForecasts[0]?.channelResults
+    ? [...monthlyForecasts[0].channelResults]
+        .sort((a, b) => a.netAdr - b.netAdr)
+        .map((item) => item.channel)[0]
+    : "tourOperators";
+  const topRoomType = firstMonth ? [...firstMonth.roomTypeResults].sort((a, b) => b.revenue - a.revenue)[0] : null;
+  const destinationExperiences = destination.attractions.slice(0, 2).join(" y ");
 
   if (weightedAverageAdr < input.targetAverageRate) {
     recommendations.push(
-      "Reasignar parte del inventario de mayor valor a canal directo y OTA premium con minimos tarifarios protegidos."
+      {
+        title: "Defensa tarifaria",
+        text: `El ADR proyectado queda US$${roundCurrency(input.targetAverageRate - weightedAverageAdr)} bajo la meta. Conviene mover inventario premium desde ${CHANNEL_LABELS[lowestNetAdrChannel]} hacia ${CHANNEL_LABELS[mostProfitableChannel]} con pisos tarifarios, restricciones de descuento y upgrades controlados.`,
+        tone: "amber"
+      }
     );
+  } else {
+    recommendations.push({
+      title: "Captura de valor",
+      text: `El ADR proyectado supera la meta en US$${roundCurrency(weightedAverageAdr - input.targetAverageRate)}. La recomendación es sostener precio público y vender más valor agregado, evitando descuentos innecesarios en fechas de alta ocupación.`,
+      tone: "emerald"
+    });
   }
 
   if (input.channels.tourOperators.share > input.channels.direct.share) {
     recommendations.push(
-      "Reducir gradualmente la cuota de tour operadores y aumentar la venta directa con beneficios exclusivos, early booking y upgrades."
+      {
+        title: "Rebalanceo de canales",
+        text: `Hoy ${CHANNEL_LABELS.direct} tiene menor peso que ${CHANNEL_LABELS.tourOperators}. Vale la pena rediseñar la mezcla con beneficios exclusivos, early booking, upgrades y paquetes propios para bajar comisión sin perder volumen.`,
+        tone: "amber"
+      }
     );
   }
 
-  recommendations.push(
-    `Diseñar paquetes de ${destination.label} que integren desayuno, experiencias y wellness para elevar ingreso por huesped sin competir solo por tarifa.`
-  );
-  recommendations.push(
-    "Trabajar revenue management por tipo de habitacion, cuidando especialmente suite y doble premium para sostener ADR mensual."
-  );
-  recommendations.push(
-    "Usar empresas y grupos pequenos de alto valor en periodos de hombro para mejorar ocupacion sin deteriorar la tarifa publica."
-  );
+  recommendations.push({
+    title: "Producto estrella",
+    text: `La habitación con mayor tracción hoy es ${topRoomType ? ROOM_TYPE_LABELS[topRoomType.type] : "la tipología principal"}. Conviene construir una escalera de valor desde esa categoría hacia opciones superiores con amenities visibles, check-in preferente y beneficios que justifiquen mejor tarifa.`,
+    tone: "slate"
+  });
 
-  return recommendations;
+  if (totalBreakfastDelta > 0) {
+    recommendations.push({
+      title: "Ingreso complementario",
+      text: `Subir desayuno desde US$${input.breakfastPriceCurrent} a US$${input.breakfastPriceProposed} abre un potencial adicional de US$${roundCurrency(totalBreakfastDelta)} entre enero y febrero. Lo más atractivo es venderlo como experiencia de marca con gastronomía local y no solo como recargo.`,
+      tone: "emerald"
+    });
+  }
+
+  if (averageOccupancy >= 90) {
+    recommendations.push({
+      title: "Experiencia premium",
+      text: `Con ocupación media de ${roundMetric(averageOccupancy)}%, el hotel tiene espacio para priorizar rentabilidad sobre volumen. Es un buen momento para lanzar paquetes firmados alrededor de ${destinationExperiences}, wellness y concierge premium.`,
+      tone: "emerald"
+    });
+  } else {
+    recommendations.push({
+      title: "Fechas de hombro",
+      text: `Como la ocupación media proyectada es ${roundMetric(averageOccupancy)}%, conviene usar empresas, small groups y escapadas temáticas para reforzar noches de menor tensión sin deteriorar la tarifa pública.`,
+      tone: "slate"
+    });
+  }
+
+  recommendations.push({
+    title: "Canal más rentable",
+    text: `${CHANNEL_LABELS[mostProfitableChannel]} deja hoy el mejor retorno por habitación, mientras ${CHANNEL_LABELS[largestNetContributor]} aporta el mayor volumen neto. La estrategia comercial debería combinar ambos roles en vez de empujar todos los esfuerzos a un solo canal.`,
+    tone: "emerald"
+  });
+
+  return uniqueRecommendations(recommendations).slice(0, 6);
 }
 
 export function validateHotelCaseInput(input: HotelCaseInput) {
@@ -250,7 +327,13 @@ export function buildHotelForecastSummary(
     mostProfitableChannel: rankedByNetAdr[0]?.[0] ?? "direct",
     largestNetContributor: rankedByNetRevenue[0]?.[0] ?? "direct",
     warnings: buildWarnings(input, weightedAverageAdr),
-    recommendations: buildRecommendations(input, weightedAverageAdr)
+    recommendations: buildRecommendations(
+      input,
+      monthlyForecasts,
+      weightedAverageAdr,
+      rankedByNetAdr[0]?.[0] ?? "direct",
+      rankedByNetRevenue[0]?.[0] ?? "direct"
+    )
   };
 }
 

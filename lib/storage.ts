@@ -103,7 +103,7 @@ function isHotelCaseResultLike(value: unknown): value is HotelCaseResult {
 
   const candidate = value as Partial<HotelCaseResult> & {
     input?: { hotelName?: unknown; destination?: unknown };
-    summary?: { weightedAverageAdr?: unknown };
+    summary?: { weightedAverageAdr?: unknown; recommendations?: unknown };
     monthlyForecasts?: unknown;
   };
 
@@ -113,6 +113,10 @@ function isHotelCaseResultLike(value: unknown): value is HotelCaseResult {
       typeof candidate.input.destination === "string" &&
       candidate.summary &&
       typeof candidate.summary.weightedAverageAdr === "number" &&
+      Array.isArray(candidate.summary.recommendations) &&
+      candidate.summary.recommendations.every(
+        (item) => item && typeof item === "object" && "title" in item && "text" in item
+      ) &&
       Array.isArray(candidate.monthlyForecasts) &&
       typeof candidate.generatedAt === "string"
   );

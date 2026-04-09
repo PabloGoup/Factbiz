@@ -475,7 +475,13 @@ export type HotelForecastSummary = {
   mostProfitableChannel: HotelSalesChannelId;
   largestNetContributor: HotelSalesChannelId;
   warnings: string[];
-  recommendations: string[];
+  recommendations: HotelRecommendation[];
+};
+
+export type HotelRecommendation = {
+  title: string;
+  text: string;
+  tone?: "emerald" | "amber" | "slate";
 };
 
 export type HotelCaseResult = {
@@ -484,4 +490,32 @@ export type HotelCaseResult = {
   monthlyForecasts: HotelMonthlyForecast[];
   summary: HotelForecastSummary;
   generatedAt: string;
+};
+
+export type SavedHotelCaseRecord = {
+  id: string;
+  hotelName: string;
+  destination: HotelDestinationId;
+  region: string;
+  country: string;
+  category: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "draft" | "solved";
+  caseInput: HotelCaseInput;
+  caseResult: HotelCaseResult | null;
+};
+
+export type SavedHotelCaseListItem = {
+  id: string;
+  hotelName: string;
+  destination: HotelDestinationId;
+  region: string;
+  country: string;
+  category: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "draft" | "solved";
+  weightedAverageAdr?: number;
+  mostProfitableChannel?: HotelSalesChannelId;
 };
