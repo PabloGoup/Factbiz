@@ -345,6 +345,46 @@ export type HotelCompetitor = {
   note: string;
 };
 
+export type HotelReferenceHotel = {
+  id: string;
+  destination: HotelDestinationId;
+  name: string;
+  country: string;
+  region: string;
+  municipality: string;
+  area: string;
+  hotelType: string;
+  stars: number;
+  positioning: string;
+  services: string[];
+  facilities: string[];
+  rates: HotelRoomRates;
+  note: string;
+  differentiationIdeas: string[];
+  sourceTitle?: string;
+  sourceUrl?: string;
+};
+
+export type HotelBenchmarkSearchInput = {
+  country: string;
+  region: string;
+  municipality: string;
+  hotelType: string;
+  stars?: number | null;
+};
+
+export type HotelBenchmarkReport = {
+  query: HotelBenchmarkSearchInput;
+  overview: string;
+  hotels: HotelReferenceHotel[];
+  marketSignals: HotelTouristStat[];
+  commonPatterns: string[];
+  differentiationIdeas: string[];
+  sources: ResearchSource[];
+  mode: "mock" | "gemini";
+  warning?: string;
+};
+
 export type HotelSepteFactorId =
   | "social"
   | "economic"

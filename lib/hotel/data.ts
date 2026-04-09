@@ -1,8 +1,11 @@
 import type {
   HotelAttraction,
+  HotelBenchmarkReport,
+  HotelBenchmarkSearchInput,
   HotelCaseInput,
   HotelCompetitor,
   HotelDestinationId,
+  HotelReferenceHotel,
   HotelResearchReport,
   HotelRoomRates,
   HotelSalesChannelId,
@@ -697,6 +700,262 @@ export const HOTEL_DESTINATION_PROFILES: Record<HotelDestinationId, HotelDestina
     ]
   }
 };
+
+const HOTEL_REFERENCE_METADATA: Record<
+  string,
+  {
+    hotelType: string;
+    stars: number;
+    differentiationIdeas: string[];
+  }
+> = {
+  "patagonia-chilena:Tierra Patagonia": {
+    hotelType: "Luxury Lodge",
+    stars: 5,
+    differentiationIdeas: [
+      "Diseñar un programa signature de bienestar y recuperación post excursión.",
+      "Usar una narrativa de expedición premium sin depender de una tarifa puramente paquetizada.",
+      "Crear una experiencia gastronómica de terroir patagónico con venta directa de estadías temáticas."
+    ]
+  },
+  "patagonia-chilena:Awasi Patagonia": {
+    hotelType: "Ultra Luxury Lodge",
+    stars: 5,
+    differentiationIdeas: [
+      "Competir con un lujo más accesible pero igual de curado en servicio.",
+      "Ofrecer experiencias privadas escalables sin replicar el costo extremo del benchmark.",
+      "Potenciar suites y concierge como capa premium para defender ADR."
+    ]
+  },
+  "patagonia-chilena:The Singular Patagonia": {
+    hotelType: "Heritage Luxury Hotel",
+    stars: 5,
+    differentiationIdeas: [
+      "Reforzar arquitectura o storytelling del hotel como parte del producto.",
+      "Combinar patrimonio, wellness y excursiones para no quedar solo en hotelería clásica.",
+      "Abrir una línea de eventos boutique y escapadas gastronómicas de alto valor."
+    ]
+  },
+  "puerto-varas:Hotel AWA": {
+    hotelType: "Luxury Boutique Hotel",
+    stars: 5,
+    differentiationIdeas: [
+      "Tomar la vista y el diseño como base, pero sumar un programa de experiencias lacustres propio.",
+      "Crear una propuesta fuerte de escapadas románticas y wellness corto.",
+      "Subir venta directa con paquetes de gastronomía, spa y excursión."
+    ]
+  },
+  "puerto-varas:Hotel Cumbres Puerto Varas": {
+    hotelType: "Hotel & Spa de ciudad-destino",
+    stars: 5,
+    differentiationIdeas: [
+      "Diferenciarse con un servicio más curado y menos masivo.",
+      "Usar gastronomía local y experiencias al aire libre como ventaja frente al competidor urbano.",
+      "Construir un producto premium para small groups y corporate selectivo."
+    ]
+  },
+  "puerto-varas:Wyndham Pettra Puerto Varas": {
+    hotelType: "Hotel de cadena premium",
+    stars: 5,
+    differentiationIdeas: [
+      "Competir con una identidad local más marcada que la de una cadena.",
+      "Potenciar suites, eventos boutique y programas de descanso de fin de semana.",
+      "Hacer revenue diferenciado entre ocio premium y corporativo."
+    ]
+  },
+  "villarrica:Vira Vira": {
+    hotelType: "Luxury Hacienda Hotel",
+    stars: 5,
+    differentiationIdeas: [
+      "Desarrollar una propuesta fuerte de naturaleza activa y descanso de lujo.",
+      "Construir un servicio premium con menos rigidez y más flexibilidad comercial.",
+      "Usar experiencias inmersivas de destino como motor de tarifa alta."
+    ]
+  },
+  "villarrica:andBeyond Vira Vira": {
+    hotelType: "Luxury Experience Lodge",
+    stars: 5,
+    differentiationIdeas: [
+      "Posicionar una experiencia premium más accesible sin perder sofisticación.",
+      "Introducir paquetes temáticos ligados a wellness, gastronomía y lago/volcán.",
+      "Diferenciar la venta directa con beneficios y actividades exclusivas."
+    ]
+  },
+  "villarrica:Park Lake Luxury Hotel": {
+    hotelType: "Resort & Spa",
+    stars: 5,
+    differentiationIdeas: [
+      "Sumar una propuesta de diseño y experiencia más aspiracional.",
+      "Separar claramente la oferta familiar de la premium para sostener mejor ADR.",
+      "Crear programas de escapada de lujo alrededor del lago y el volcán."
+    ]
+  },
+  "san-pedro-de-atacama:Tierra Atacama": {
+    hotelType: "Luxury All-Inclusive Lodge",
+    stars: 5,
+    differentiationIdeas: [
+      "Diseñar un concepto premium que combine astronomía, wellness y excursiones curadas.",
+      "Competir en narrativa y personalización, no solo en cantidad de inclusiones.",
+      "Defender tarifa con paquetes propios y mayor peso de canal directo."
+    ]
+  },
+  "san-pedro-de-atacama:Awasi Atacama": {
+    hotelType: "Ultra Luxury Boutique Lodge",
+    stars: 5,
+    differentiationIdeas: [
+      "Crear una capa premium opcional con excursión privada sin replicar el modelo completo de ultra lujo.",
+      "Diferenciarse con suites signature y experiencias nocturnas de alto valor.",
+      "Usar gastronomía y diseño local como argumento para sostener un ADR alto."
+    ]
+  },
+  "san-pedro-de-atacama:Hotel Cumbres San Pedro": {
+    hotelType: "Resort de lujo de experiencias",
+    stars: 5,
+    differentiationIdeas: [
+      "Construir una experiencia más boutique y menos estándar de resort.",
+      "Potenciar observación astronómica y servicio de concierge como sello.",
+      "Aumentar captación directa con paquetes y upgrades por estadía."
+    ]
+  },
+  "papudo:Hotel Casa Zapallar": {
+    hotelType: "Hotel Boutique Costero",
+    stars: 4,
+    differentiationIdeas: [
+      "Escalar el producto hacia lujo costero con diseño, privacidad y gastronomía.",
+      "Convertir el descanso de playa en escapada premium con wellness y experiencias.",
+      "Construir una propuesta más fuerte para fines de semana de alto ticket."
+    ]
+  },
+  "papudo:Hotel Mae": {
+    hotelType: "Hotel Boutique Lifestyle",
+    stars: 4,
+    differentiationIdeas: [
+      "Diferenciar con una narrativa más exclusiva y mayor personalización.",
+      "Agregar experiencias de costa, sunset y gastronomía como upsell.",
+      "Desarrollar una identidad visual y comercial más premium que lifestyle genérico."
+    ]
+  },
+  "papudo:Benchmark premium costa norte": {
+    hotelType: "Resort costero premium",
+    stars: 5,
+    differentiationIdeas: [
+      "Usar la costa como escenario de experiencias premium y no solo alojamiento.",
+      "Definir un servicio insignia que justifique una tarifa por encima del benchmark base.",
+      "Separar propuesta de descanso, eventos boutique y gastronomía para ganar margen."
+    ]
+  }
+};
+
+export const HOTEL_REFERENCE_CATALOG: HotelReferenceHotel[] = Object.values(HOTEL_DESTINATION_PROFILES).flatMap((profile) =>
+  profile.competitors.map((competitor, index) => {
+    const metadata =
+      HOTEL_REFERENCE_METADATA[`${profile.id}:${competitor.name}`] ??
+      HOTEL_REFERENCE_METADATA[`${profile.id}:${profile.competitors[0]?.name ?? ""}`] ?? {
+        hotelType: "Hotel premium",
+        stars: 5,
+        differentiationIdeas: [
+          "Construir un relato de marca más claro que el benchmark.",
+          "Usar venta directa y paquetes propios para proteger margen.",
+          "Definir un atributo signature que el mercado recuerde con facilidad."
+        ]
+      };
+
+    return {
+      id: `${profile.id}-${index + 1}`,
+      destination: profile.id,
+      name: competitor.name,
+      country: profile.country,
+      region: profile.region,
+      municipality: profile.label,
+      area: competitor.area,
+      hotelType: metadata.hotelType,
+      stars: metadata.stars,
+      positioning: competitor.positioning,
+      services: competitor.services,
+      facilities: competitor.facilities,
+      rates: competitor.rates,
+      note: competitor.note,
+      differentiationIdeas: metadata.differentiationIdeas,
+      sourceTitle: profile.sources[1]?.title ?? profile.sources[0]?.title,
+      sourceUrl: profile.sources[1]?.url ?? profile.sources[0]?.url
+    };
+  })
+);
+
+export function inferHotelDestinationFromSearch(input: Pick<HotelBenchmarkSearchInput, "region" | "municipality">) {
+  const normalizedRegion = input.region.trim().toLowerCase();
+  const normalizedMunicipality = input.municipality.trim().toLowerCase();
+
+  const direct = Object.values(HOTEL_DESTINATION_PROFILES).find((profile) => {
+    const profileLabel = profile.label.toLowerCase();
+    const profileRegion = profile.region.toLowerCase();
+
+    return (
+      (!!normalizedMunicipality && (normalizedMunicipality.includes(profileLabel) || profileLabel.includes(normalizedMunicipality))) ||
+      (!!normalizedRegion && (normalizedRegion.includes(profileRegion) || profileRegion.includes(normalizedRegion)))
+    );
+  });
+
+  return direct?.id ?? "san-pedro-de-atacama";
+}
+
+export function buildFallbackBenchmarkReport(input: HotelBenchmarkSearchInput): HotelBenchmarkReport {
+  const destinationId = inferHotelDestinationFromSearch(input);
+  const profile = HOTEL_DESTINATION_PROFILES[destinationId];
+  const region = input.region.trim().toLowerCase();
+  const municipality = input.municipality.trim().toLowerCase();
+  const hotelType = input.hotelType.trim().toLowerCase();
+  const stars = input.stars ?? null;
+
+  const hotels = HOTEL_REFERENCE_CATALOG.filter((hotel) => {
+    if (input.country && hotel.country.toLowerCase() !== input.country.trim().toLowerCase()) return false;
+    if (region && !hotel.region.toLowerCase().includes(region) && !region.includes(hotel.region.toLowerCase())) return false;
+    if (
+      municipality &&
+      !hotel.municipality.toLowerCase().includes(municipality) &&
+      !municipality.includes(hotel.municipality.toLowerCase())
+    ) {
+      return false;
+    }
+    if (hotelType && !hotel.hotelType.toLowerCase().includes(hotelType)) return false;
+    if (stars && hotel.stars !== stars) return false;
+
+    return true;
+  });
+
+  const effectiveHotels = hotels.length ? hotels : HOTEL_REFERENCE_CATALOG.filter((hotel) => hotel.destination === destinationId);
+  const primarySource = effectiveHotels[0]?.sourceTitle && effectiveHotels[0]?.sourceUrl
+    ? {
+        title: effectiveHotels[0].sourceTitle,
+        url: effectiveHotels[0].sourceUrl,
+        note: "Fuente base del benchmark local usado cuando Gemini no completa la búsqueda."
+      }
+    : profile.sources[0];
+
+  return {
+    query: input,
+    overview: `Se construyó un set comparativo base para ${input.municipality || profile.label} usando referencias locales del módulo. Sirve para revisar tarifas, formato hotelero y líneas de diferenciación antes de armar el caso.`,
+    hotels: effectiveHotels.slice(0, 6),
+    marketSignals: profile.touristStats.slice(0, 3).map((signal, index) => ({
+      ...signal,
+      sourceTitle: signal.sourceTitle ?? profile.sources[index]?.title ?? primarySource?.title,
+      sourceUrl: signal.sourceUrl ?? profile.sources[index]?.url ?? primarySource?.url
+    })),
+    commonPatterns: [
+      "El benchmark compite más por experiencia y posicionamiento que por precio aislado.",
+      "Los atributos más repetidos suelen ser spa, excursiones, gastronomía y vistas.",
+      "La venta directa y los paquetes propios aparecen como palancas claras para defender ADR."
+    ],
+    differentiationIdeas: effectiveHotels[0]?.differentiationIdeas ?? [
+      "Definir un atributo signature que no se repita en todos los hoteles del set.",
+      "Diseñar paquetes propios para reducir dependencia de intermediarios.",
+      "Usar gastronomía, wellness o experiencias como defensa tarifaria real."
+    ],
+    sources: profile.sources,
+    mode: "mock",
+    warning: "Gemini no completó la búsqueda comparativa. Se muestra un benchmark base del módulo."
+  };
+}
 
 export function createDefaultHotelCase(): HotelCaseInput {
   const destination = HOTEL_DESTINATION_PROFILES["san-pedro-de-atacama"];

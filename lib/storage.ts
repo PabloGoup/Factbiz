@@ -1,6 +1,8 @@
 import { STORAGE_KEYS } from "@/lib/constants";
 import type {
   EvaluationSnapshot,
+  HotelBenchmarkReport,
+  HotelBenchmarkSearchInput,
   HotelCaseInput,
   HotelCaseResult,
   InterviewSession,
@@ -116,6 +118,25 @@ function isHotelCaseResultLike(value: unknown): value is HotelCaseResult {
   );
 }
 
+function isHotelBenchmarkReportLike(value: unknown): value is HotelBenchmarkReport {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Partial<HotelBenchmarkReport> & {
+    query?: { region?: unknown; country?: unknown };
+    hotels?: unknown;
+    marketSignals?: unknown;
+  };
+
+  return Boolean(
+    candidate.query &&
+      typeof candidate.query.region === "string" &&
+      typeof candidate.query.country === "string" &&
+      Array.isArray(candidate.hotels) &&
+      Array.isArray(candidate.marketSignals) &&
+      typeof candidate.overview === "string"
+  );
+}
+
 export function getStoredHotelCase(fallback: HotelCaseInput) {
   return readStorage<HotelCaseInput>(STORAGE_KEYS.hotelCase, fallback);
 }
@@ -137,4 +158,27 @@ export function getStoredHotelResult() {
 
 export function setStoredHotelResult(result: HotelCaseResult) {
   writeStorage(STORAGE_KEYS.hotelResult, result);
+}
+
+export function getStoredHotelBenchmarkFilters(fallback: HotelBenchmarkSearchInput) {
+  return readStorage<HotelBenchmarkSearchInput>(STORAGE_KEYS.hotelBenchmarkFilters, fallback);
+}
+
+export function setStoredHotelBenchmarkFilters(filters: HotelBenchmarkSearchInput) {
+  writeStorage(STORAGE_KEYS.hotelBenchmarkFilters, filters);
+}
+
+export function getStoredHotelBenchmarkResult() {
+  const result = readStorage<HotelBenchmarkReport | null>(STORAGE_KEYS.hotelBenchmarkResult, null);
+
+  if (result && !isHotelBenchmarkReportLike(result)) {
+    removeStorage(STORAGE_KEYS.hotelBenchmarkResult);
+    return null;
+  }
+
+  return result;
+}
+
+export function setStoredHotelBenchmarkResult(result: HotelBenchmarkReport) {
+  writeStorage(STORAGE_KEYS.hotelBenchmarkResult, result);
 }

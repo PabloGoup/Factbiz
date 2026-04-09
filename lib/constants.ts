@@ -6,7 +6,9 @@ export const STORAGE_KEYS = {
   evaluation: "factibiz.evaluation",
   interview: "factibiz.interview",
   hotelCase: "factibiz.hotel-case",
-  hotelResult: "factibiz.hotel-result"
+  hotelResult: "factibiz.hotel-result",
+  hotelBenchmarkFilters: "factibiz.hotel-benchmark-filters",
+  hotelBenchmarkResult: "factibiz.hotel-benchmark-result"
 } as const;
 
 export const BLOCK_LABELS: Record<BlockId, string> = {

@@ -31,17 +31,30 @@ import {
   createDefaultHotelCase,
   DEFAULT_HOTEL_CHANNELS,
   HOTEL_CHANNEL_LABELS,
+  HOTEL_REFERENCE_CATALOG,
   HOTEL_DESTINATION_OPTIONS,
   HOTEL_DESTINATION_PROFILES
 } from "@/lib/hotel/data";
-import { getStoredHotelCase, getStoredHotelResult, setStoredHotelCase, setStoredHotelResult } from "@/lib/storage";
+import {
+  getStoredHotelBenchmarkFilters,
+  getStoredHotelBenchmarkResult,
+  getStoredHotelCase,
+  getStoredHotelResult,
+  setStoredHotelBenchmarkFilters,
+  setStoredHotelBenchmarkResult,
+  setStoredHotelCase,
+  setStoredHotelResult
+} from "@/lib/storage";
 import type {
+  HotelBenchmarkReport,
+  HotelBenchmarkSearchInput,
   HotelCaseInput,
   HotelCaseResult,
+  HotelReferenceHotel,
   HotelSalesChannelId
 } from "@/types";
 
-type HotelWorkbenchTab = "case" | "research" | "forecast" | "strategy";
+type HotelWorkbenchTab = "benchmarks" | "case" | "research" | "forecast" | "strategy";
 
 const ROOM_TYPE_ORDER = ["single", "double", "triple", "suite"] as const;
 const CHANNEL_ORDER = ["tourOperators", "onlineAgencies", "direct", "corporate"] as const;
@@ -251,16 +264,83 @@ function SourceBadge({
   );
 }
 
+function ComboField({
+  label,
+  hint,
+  value,
+  onChange,
+  options,
+  listId,
+  placeholder
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  listId: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="grid gap-2">
+      <div>
+        <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">{label}</p>
+        {hint ? <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{hint}</p> : null}
+      </div>
+      <Input list={listId} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+    </div>
+  );
+}
+
+function sortOptions(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right, "es"));
+}
+
+function averageRate(references: HotelReferenceHotel[], type: keyof HotelReferenceHotel["rates"]) {
+  if (!references.length) return 0;
+
+  return references.reduce((total, reference) => total + reference.rates[type], 0) / references.length;
+}
+
 export function HotelCaseWorkbench() {
   const [hotelCase, setHotelCase] = useState<HotelCaseInput>(createDefaultHotelCase());
+  const [benchmarkFilters, setBenchmarkFilters] = useState<HotelBenchmarkSearchInput>({
+    country: "Chile",
+    region: createDefaultHotelCase().region,
+    municipality: HOTEL_DESTINATION_PROFILES[createDefaultHotelCase().destination].label,
+    hotelType: "",
+    stars: 5
+  });
+  const [benchmarkResult, setBenchmarkResult] = useState<HotelBenchmarkReport | null>(null);
+  const [selectedBenchmarkId, setSelectedBenchmarkId] = useState<string | null>(null);
+  const [benchmarkLoading, setBenchmarkLoading] = useState(false);
+  const [benchmarkError, setBenchmarkError] = useState<string | null>(null);
   const [result, setResult] = useState<HotelCaseResult | null>(null);
-  const [activeTab, setActiveTab] = useState<HotelWorkbenchTab>("case");
+  const [activeTab, setActiveTab] = useState<HotelWorkbenchTab>("benchmarks");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setHotelCase(getStoredHotelCase(createDefaultHotelCase()));
+    const storedCase = getStoredHotelCase(createDefaultHotelCase());
+    setHotelCase(storedCase);
+    setBenchmarkFilters(
+      getStoredHotelBenchmarkFilters({
+        country: storedCase.country,
+        region: storedCase.region,
+        municipality: HOTEL_DESTINATION_PROFILES[storedCase.destination].label,
+        hotelType: "",
+        stars: storedCase.category.includes("4") ? 4 : 5
+      })
+    );
+    const storedBenchmarkResult = getStoredHotelBenchmarkResult();
+    setBenchmarkResult(storedBenchmarkResult);
+    setSelectedBenchmarkId(storedBenchmarkResult?.hotels[0]?.id ?? null);
     setResult(getStoredHotelResult());
     setHydrated(true);
   }, []);
@@ -269,6 +349,11 @@ export function HotelCaseWorkbench() {
     if (!hydrated) return;
     setStoredHotelCase(hotelCase);
   }, [hotelCase, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setStoredHotelBenchmarkFilters(benchmarkFilters);
+  }, [benchmarkFilters, hydrated]);
 
   const updateCase = <K extends keyof HotelCaseInput>(key: K, value: HotelCaseInput[K]) => {
     setHotelCase((current) => ({
@@ -322,6 +407,39 @@ export function HotelCaseWorkbench() {
         ...profile.marketRateReference
       }
     }));
+
+    setBenchmarkFilters((current) => ({
+      ...current,
+      country: profile.country,
+      region: profile.region,
+      municipality: profile.label
+    }));
+  };
+
+  const applyReferenceToCase = (reference: HotelReferenceHotel) => {
+    const profile = HOTEL_DESTINATION_PROFILES[reference.destination];
+    const combinedServices = Array.from(new Set([...reference.services, ...reference.facilities])).join(", ");
+
+    setSelectedBenchmarkId(reference.id);
+    setBenchmarkFilters({
+      country: reference.country,
+      region: reference.region,
+      municipality: reference.municipality,
+      hotelType: reference.hotelType,
+      stars: reference.stars
+    });
+
+    setHotelCase((current) => ({
+      ...current,
+      destination: reference.destination,
+      region: reference.region,
+      country: reference.country,
+      category: `${reference.stars} estrellas`,
+      roomRates: { ...reference.rates },
+      concept: `${reference.hotelType} inspirado en referencias premium de ${profile.label}, con foco en ${reference.positioning.toLowerCase()}.`,
+      services: combinedServices,
+      differentiation: reference.differentiationIdeas[0] ?? current.differentiation
+    }));
   };
 
   const totalRoomMix =
@@ -331,6 +449,88 @@ export function HotelCaseWorkbench() {
     hotelCase.channels.onlineAgencies.share +
     hotelCase.channels.direct.share +
     hotelCase.channels.corporate.share;
+
+  const countryOptions = sortOptions(HOTEL_REFERENCE_CATALOG.map((reference) => reference.country));
+  const regionOptions = sortOptions(
+    HOTEL_REFERENCE_CATALOG.filter((reference) => !benchmarkFilters.country || reference.country === benchmarkFilters.country).map(
+      (reference) => reference.region
+    )
+  );
+  const municipalityOptions = sortOptions(
+    HOTEL_REFERENCE_CATALOG.filter(
+      (reference) =>
+        (!benchmarkFilters.country || reference.country === benchmarkFilters.country) &&
+        (!benchmarkFilters.region || reference.region === benchmarkFilters.region)
+    ).map((reference) => reference.municipality)
+  );
+  const hotelTypeOptions = sortOptions(
+    HOTEL_REFERENCE_CATALOG.filter(
+      (reference) =>
+        (!benchmarkFilters.country || reference.country === benchmarkFilters.country) &&
+        (!benchmarkFilters.region || reference.region === benchmarkFilters.region) &&
+        (!benchmarkFilters.municipality || reference.municipality === benchmarkFilters.municipality)
+    ).map((reference) => reference.hotelType)
+  );
+  const starOptions = sortOptions(HOTEL_REFERENCE_CATALOG.map((reference) => String(reference.stars)));
+
+  const benchmarkHotels = benchmarkResult?.hotels ?? [];
+  const selectedReference =
+    benchmarkHotels.find((reference) => reference.id === selectedBenchmarkId) ?? benchmarkHotels[0] ?? null;
+  const averageDoubleReferenceRate = averageRate(benchmarkHotels, "double");
+  const averageSuiteReferenceRate = averageRate(benchmarkHotels, "suite");
+  const featureCounts = benchmarkHotels.reduce<Record<string, number>>((accumulator, reference) => {
+    for (const feature of [...reference.services, ...reference.facilities]) {
+      accumulator[feature] = (accumulator[feature] ?? 0) + 1;
+    }
+
+    return accumulator;
+  }, {});
+  const repeatedFeatures = Object.entries(featureCounts)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "es"))
+    .slice(0, 4)
+    .map(([feature]) => feature);
+  const differentiationIdeas =
+    selectedReference?.differentiationIdeas ??
+    benchmarkResult?.differentiationIdeas ??
+    [
+      `Tomar ${HOTEL_DESTINATION_PROFILES[hotelCase.destination].attractions[0]?.toLowerCase() ?? "el destino"} como eje del producto, y no solo como contexto del hotel.`,
+      "Diseñar una ventaja clara en servicio, paquetes o wellness para no competir solo por tarifa.",
+      "Proteger el ADR con más venta directa y una propuesta propia de experiencias."
+    ];
+  const starValueLabel = benchmarkFilters.stars ? `${benchmarkFilters.stars} estrellas` : "Todas las categorias";
+
+  const runBenchmarkSearch = async () => {
+    setBenchmarkLoading(true);
+    setBenchmarkError(null);
+
+    try {
+      const response = await fetch("/api/hotel-benchmarks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(benchmarkFilters)
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        const message = payload.error ?? "No fue posible ejecutar la búsqueda comparativa hotelera.";
+        throw new Error(message);
+      }
+
+      const parsed = payload as HotelBenchmarkReport;
+      setBenchmarkResult(parsed);
+      setSelectedBenchmarkId(parsed.hotels[0]?.id ?? null);
+      setStoredHotelBenchmarkResult(parsed);
+    } catch (currentError) {
+      setBenchmarkError(
+        currentError instanceof Error ? currentError.message : "No fue posible ejecutar la búsqueda comparativa hotelera."
+      );
+    } finally {
+      setBenchmarkLoading(false);
+    }
+  };
 
   const solveHotelCase = async () => {
     setLoading(true);
@@ -368,8 +568,9 @@ export function HotelCaseWorkbench() {
     subtitle: string;
     icon: ComponentType<{ className?: string }>;
   }> = [
-    { id: "case", label: "1. Armar Caso", subtitle: "Completa los datos base", icon: Hotel },
-    { id: "research", label: "2. Entender Mercado", subtitle: "Destino, competencia y fuentes", icon: FileSearch },
+    { id: "benchmarks", label: "0. Buscar Benchmark", subtitle: "Comparativa con Gemini", icon: FileSearch },
+    { id: "case", label: "1. Preparar Caso", subtitle: "Datos base del proyecto", icon: Hotel },
+    { id: "research", label: "2. Entender Mercado", subtitle: "Destino, competencia y fuentes", icon: BookOpenText },
     { id: "forecast", label: "3. Ver Numeros", subtitle: "Ocupacion, ADR y comisiones", icon: ReceiptText },
     { id: "strategy", label: "4. Tomar Decision", subtitle: "Plan, alertas y recomendaciones", icon: Target }
   ];
@@ -390,8 +591,8 @@ export function HotelCaseWorkbench() {
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
             Este espacio está pensado para que cualquier persona pueda entender un caso hotelero paso a paso.
-            Primero completas el caso, luego la app investiga el mercado, calcula los números y finalmente te
-            explica qué significan.
+            Primero revisas referencias comparables, luego armas tu caso, después la app investiga el mercado,
+            calcula los números y finalmente te explica qué significan.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -400,9 +601,19 @@ export function HotelCaseWorkbench() {
             onClick={() => {
               const example = createDefaultHotelCase();
               setHotelCase(example);
+              setBenchmarkFilters({
+                country: example.country,
+                region: example.region,
+                municipality: HOTEL_DESTINATION_PROFILES[example.destination].label,
+                hotelType: "",
+                stars: example.category.includes("4") ? 4 : 5
+              });
+              setSelectedBenchmarkId(null);
+              setBenchmarkResult(null);
+              setBenchmarkError(null);
               setResult(null);
               setError(null);
-              setActiveTab("case");
+              setActiveTab("benchmarks");
             }}
           >
             <Sparkles className="mr-2 h-4 w-4" />
@@ -472,7 +683,7 @@ export function HotelCaseWorkbench() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {tabs.map((tab) => {
             const Icon = tab.icon;
-            const disabled = tab.id !== "case" && !result;
+            const disabled = tab.id !== "benchmarks" && tab.id !== "case" && !result;
 
             return (
               <button
@@ -499,14 +710,340 @@ export function HotelCaseWorkbench() {
         </div>
       </Card>
 
-      {activeTab === "case" ? (
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-6">
+      {activeTab === "benchmarks" ? (
+        <div className="space-y-6">
+          <Card>
+            <SectionIntro
+              step="Paso 0"
+              title="Búsqueda comparativa con Gemini"
+              description="Aquí haces la búsqueda competitiva antes de armar el caso. Gemini investiga la zona, propone comparables y organiza la salida para revisar tarifas, tipo de hotel y opciones de diferenciación."
+            />
+            <HelperDetails title="¿Cómo usar esta pestaña?" defaultOpen>
+              Parte por región y, si quieres, acota por comuna, tipo de hotel y estrellas. Luego revisa la grilla de comparables y toma uno como base para completar el caso con menos fricción.
+            </HelperDetails>
+            <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Filtros de búsqueda
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    Esta búsqueda consulta Gemini y luego te devuelve una comparativa usable en tablas tipo grilla.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setBenchmarkFilters({
+                        country: "Chile",
+                        region: "",
+                        municipality: "",
+                        hotelType: "",
+                        stars: null
+                      });
+                      setSelectedBenchmarkId(null);
+                      setBenchmarkResult(null);
+                      setBenchmarkError(null);
+                    }}
+                  >
+                    <RefreshCcw className="mr-2 h-4 w-4" />
+                    Limpiar filtros
+                  </Button>
+                  <Button onClick={() => void runBenchmarkSearch()} disabled={benchmarkLoading || benchmarkFilters.region.trim().length < 2}>
+                    {benchmarkLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileSearch className="mr-2 h-4 w-4" />}
+                    Buscar con Gemini
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                <ComboField
+                  label="País"
+                  hint="Base geográfica"
+                  value={benchmarkFilters.country}
+                  onChange={(value) => setBenchmarkFilters((current) => ({ ...current, country: value }))}
+                  options={countryOptions}
+                  listId="hotel-benchmark-country"
+                  placeholder="Ej. Chile"
+                />
+                <ComboField
+                  label="Región"
+                  hint="Dato principal para buscar"
+                  value={benchmarkFilters.region}
+                  onChange={(value) => setBenchmarkFilters((current) => ({ ...current, region: value }))}
+                  options={regionOptions}
+                  listId="hotel-benchmark-region"
+                  placeholder="Ej. Antofagasta"
+                />
+                <ComboField
+                  label="Comuna o destino"
+                  hint="Opcional"
+                  value={benchmarkFilters.municipality}
+                  onChange={(value) => setBenchmarkFilters((current) => ({ ...current, municipality: value }))}
+                  options={municipalityOptions}
+                  listId="hotel-benchmark-municipality"
+                  placeholder="Ej. San Pedro de Atacama"
+                />
+                <ComboField
+                  label="Tipo de hotel"
+                  hint="Opcional"
+                  value={benchmarkFilters.hotelType}
+                  onChange={(value) => setBenchmarkFilters((current) => ({ ...current, hotelType: value }))}
+                  options={hotelTypeOptions}
+                  listId="hotel-benchmark-type"
+                  placeholder="Ej. Luxury Lodge"
+                />
+                <ComboField
+                  label="Estrellas"
+                  hint="Opcional"
+                  value={benchmarkFilters.stars ? String(benchmarkFilters.stars) : ""}
+                  onChange={(value) =>
+                    setBenchmarkFilters((current) => ({
+                      ...current,
+                      stars: value ? Number(value) : null
+                    }))
+                  }
+                  options={starOptions}
+                  listId="hotel-benchmark-stars"
+                  placeholder="4 o 5"
+                />
+              </div>
+            </div>
+            {benchmarkError ? <p className="mt-4 text-sm text-red-600 dark:text-red-400">{benchmarkError}</p> : null}
+          </Card>
+
+          {benchmarkResult ? (
+            <>
+              <Card>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Resultado del benchmark
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                      {benchmarkResult.mode === "gemini" ? "Comparativa construida con Gemini" : "Comparativa base del módulo"}
+                    </h2>
+                    <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+                      {benchmarkResult.overview}
+                    </p>
+                  </div>
+                  <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                    {benchmarkResult.mode === "gemini" ? "Gemini" : "Fallback local"}
+                  </div>
+                </div>
+                {benchmarkResult.warning ? (
+                  <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">{benchmarkResult.warning}</p>
+                ) : null}
+                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <SummaryMetric
+                    label="Hoteles"
+                    value={formatCompactNumber(benchmarkHotels.length)}
+                    helper="Cantidad de comparables detectados por la búsqueda."
+                  />
+                  <SummaryMetric
+                    label="ADR doble"
+                    value={formatUsd(averageDoubleReferenceRate)}
+                    helper="Promedio de tarifa doble entre los comparables listados."
+                  />
+                  <SummaryMetric
+                    label="ADR suite"
+                    value={formatUsd(averageSuiteReferenceRate)}
+                    helper="Promedio de tarifa suite dentro del benchmark activo."
+                  />
+                  <SummaryMetric
+                    label="Filtro"
+                    value={starValueLabel}
+                    helper={benchmarkFilters.municipality || benchmarkFilters.region || benchmarkFilters.country}
+                  />
+                </div>
+              </Card>
+
+              <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+                <div className="space-y-6">
+                  <TableCard
+                    title="Grilla comparativa de hoteles"
+                    description="La tabla resume los comparables de la zona para que puedas revisar rápidamente formato, tarifas y foco competitivo."
+                    helperTitle="Cómo leer la grilla"
+                    helperContent={
+                      <>
+                        Selecciona una fila para ver más detalle al costado. La mejor forma de usar esta pantalla es elegir un benchmark principal y luego llevarlo al caso.
+                      </>
+                    }
+                  >
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="text-slate-500 dark:text-slate-400">
+                        <tr>
+                          <th className="pb-3">Hotel</th>
+                          <th className="pb-3">Destino</th>
+                          <th className="pb-3">Tipo</th>
+                          <th className="pb-3">Estrellas</th>
+                          <th className="pb-3">Single</th>
+                          <th className="pb-3">Doble</th>
+                          <th className="pb-3">Suite</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {benchmarkHotels.map((reference) => {
+                          const isSelected = selectedReference?.id === reference.id;
+
+                          return (
+                            <tr
+                              key={reference.id}
+                              onClick={() => setSelectedBenchmarkId(reference.id)}
+                              className={`cursor-pointer border-t border-slate-200 dark:border-slate-800 ${isSelected ? "bg-slate-50 dark:bg-slate-900" : ""}`}
+                            >
+                              <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{reference.name}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{reference.municipality}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{reference.hotelType}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{reference.stars}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(reference.rates.single)}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(reference.rates.double)}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(reference.rates.suite)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </TableCard>
+
+                  <TableCard
+                    title="Señales de mercado"
+                    description="Estas señales te ayudan a justificar por qué la zona soporta o dificulta un nuevo hotel."
+                  >
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="text-slate-500 dark:text-slate-400">
+                        <tr>
+                          <th className="pb-3">Indicador</th>
+                          <th className="pb-3">Valor</th>
+                          <th className="pb-3">Lectura</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {benchmarkResult.marketSignals.map((signal) => (
+                          <tr key={`${signal.label}-${signal.value}`} className="border-t border-slate-200 dark:border-slate-800">
+                            <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{signal.label}</td>
+                            <td className="py-3 text-slate-600 dark:text-slate-300">{signal.value}</td>
+                            <td className="py-3 text-slate-600 dark:text-slate-300">
+                              {signal.note}
+                              <SourceBadge title={signal.sourceTitle} url={signal.sourceUrl} asOf={signal.asOf} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </TableCard>
+                </div>
+
+                <div className="space-y-6 xl:sticky xl:top-24 self-start">
+                  <Card className="p-5">
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Hotel seleccionado
+                    </p>
+                    <h3 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                      {selectedReference?.name ?? "Selecciona un hotel de la grilla"}
+                    </h3>
+                    <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                      {selectedReference
+                        ? `${selectedReference.municipality} · ${selectedReference.area}. ${selectedReference.note}`
+                        : "El detalle del benchmark aparecerá aquí para ayudarte a decidir si lo usas como base del caso."}
+                    </p>
+                    {selectedReference ? (
+                      <>
+                        <div className="mt-5 grid gap-3 md:grid-cols-2">
+                          <Highlight title="Tarifa doble" text={formatUsd(selectedReference.rates.double)} tone="emerald" />
+                          <Highlight title="Producto" text={`${selectedReference.hotelType} · ${selectedReference.stars} estrellas`} />
+                        </div>
+                        <div className="mt-5">
+                          <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Servicios e instalaciones</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                            {[...selectedReference.services, ...selectedReference.facilities].join(", ")}
+                          </p>
+                        </div>
+                        <div className="mt-5 grid gap-3">
+                          {selectedReference.differentiationIdeas.map((idea, index) => (
+                            <Highlight key={`${idea}-${index}`} title={`Diferenciación ${index + 1}`} text={idea} />
+                          ))}
+                        </div>
+                        <div className="mt-5 flex flex-wrap gap-3">
+                          <Button
+                            onClick={() => {
+                              applyReferenceToCase(selectedReference);
+                              setActiveTab("case");
+                            }}
+                          >
+                            Usar este benchmark en mi caso
+                          </Button>
+                          <SourceBadge title={selectedReference.sourceTitle} url={selectedReference.sourceUrl} />
+                        </div>
+                      </>
+                    ) : null}
+                  </Card>
+
+                  <Card className="p-5">
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Patrones y consejos
+                    </p>
+                    <div className="mt-4 grid gap-3">
+                      {benchmarkResult.commonPatterns.map((pattern, index) => (
+                        <Highlight key={`${pattern}-${index}`} title={`Patrón ${index + 1}`} text={pattern} />
+                      ))}
+                      {benchmarkResult.differentiationIdeas.map((idea, index) => (
+                        <Highlight key={`${idea}-${index}`} title={`Consejo ${index + 1}`} text={idea} tone={index === 0 ? "emerald" : "amber"} />
+                      ))}
+                    </div>
+                  </Card>
+                </div>
+              </div>
+            </>
+          ) : (
             <Card>
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                Completa al menos la región y ejecuta la búsqueda con Gemini. Cuando lleguen los resultados, esta pestaña mostrará la comparativa en tablas, la lectura del benchmark y un botón para usar uno de los hoteles como base del caso.
+              </div>
+            </Card>
+          )}
+        </div>
+      ) : null}
+
+      {activeTab === "case" ? (
+        <div className="space-y-6">
+          <Card>
+            <SectionIntro
+              step="Paso 1"
+              title="Prepara tu caso hotelero"
+              description="Esta pestaña se usa para modelar el proyecto. Si aún no elegiste benchmark, vuelve a la pestaña anterior y trae una referencia comparativa para trabajar con una base más realista."
+            />
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <SummaryMetric
+                label="Benchmark activo"
+                value={selectedReference?.name ?? "Sin benchmark"}
+                helper="Puedes volver a la pestaña Buscar Benchmark y traer un comparable real para usarlo como base."
+              />
+              <SummaryMetric
+                label="ADR doble benchmark"
+                value={selectedReference ? formatUsd(selectedReference.rates.double) : formatUsd(averageDoubleReferenceRate)}
+                helper="Sirve para no construir un caso fuera del rango del mercado."
+              />
+              <SummaryMetric
+                label="Filtro usado"
+                value={starValueLabel}
+                helper={benchmarkFilters.municipality || benchmarkFilters.region || benchmarkFilters.country}
+              />
+              <SummaryMetric
+                label="Consejo"
+                value="Modela desde una referencia"
+                helper="Tomar un benchmark antes de completar tarifas y servicios hace que el caso sea mucho más creíble."
+              />
+            </div>
+          </Card>
+
+          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-6">
+              <Card>
               <SectionIntro
                 step="Paso 1"
                 title="Configura el hotel y el destino"
-                description="Aquí defines qué hotel quieres evaluar. Si no tienes claro algún dato, puedes partir con el ejemplo y luego ajustar."
+                description="Aquí defines qué hotel quieres evaluar. Si ya elegiste una referencia arriba, este bloque te servirá para adaptar esa base a tu propio proyecto."
               />
               <HelperDetails title="¿Qué conviene completar bien aquí?" defaultOpen>
                 Lo más importante es elegir bien el destino, definir cuántas habitaciones tendrá el hotel, qué
@@ -757,29 +1294,29 @@ export function HotelCaseWorkbench() {
               </div>
             </Card>
 
-            <div className="flex flex-wrap gap-3">
-              <Button onClick={() => void solveHotelCase()} disabled={loading}>
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                Resolver caso hotelero
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setHotelCase(createDefaultHotelCase());
-                  setResult(null);
-                  setError(null);
-                }}
-              >
-                <RefreshCcw className="mr-2 h-4 w-4" />
-                Reiniciar
-              </Button>
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={() => void solveHotelCase()} disabled={loading}>
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                  Resolver caso hotelero
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setHotelCase(createDefaultHotelCase());
+                    setResult(null);
+                    setError(null);
+                  }}
+                >
+                  <RefreshCcw className="mr-2 h-4 w-4" />
+                  Reiniciar
+                </Button>
+              </div>
+
+              {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
             </div>
 
-            {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-          </div>
-
-          <div className="space-y-6">
-            <Card>
+            <div className="space-y-6 xl:sticky xl:top-24 self-start">
+              <Card>
               <SectionIntro
                 title="Revision rapida"
                 description="Antes de resolver el caso, aquí ves si los datos están consistentes."
@@ -803,7 +1340,7 @@ export function HotelCaseWorkbench() {
               </div>
             </Card>
 
-            <Card>
+              <Card>
               <div className="flex items-center gap-3">
                 <MapPinned className="h-5 w-5 text-slate-500 dark:text-slate-400" />
                 <div>
@@ -829,7 +1366,7 @@ export function HotelCaseWorkbench() {
               </HelperDetails>
             </Card>
 
-            <Card>
+              <Card>
               <div className="flex items-center gap-3">
                 <BedDouble className="h-5 w-5 text-slate-500 dark:text-slate-400" />
                 <div>
@@ -857,7 +1394,8 @@ export function HotelCaseWorkbench() {
                   tone="amber"
                 />
               </div>
-            </Card>
+              </Card>
+            </div>
           </div>
         </div>
       ) : null}
