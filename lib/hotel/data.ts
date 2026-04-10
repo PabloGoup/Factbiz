@@ -1021,6 +1021,14 @@ export const HOTEL_REFERENCE_CATALOG: HotelReferenceHotel[] = Object.values(HOTE
       services: competitor.services,
       facilities: competitor.facilities,
       rates: competitor.rates,
+      rateCurrency: "USD",
+      rateBasis: "Referencia interna por habitacion/noche usada como fallback académico; validar contra motor de reservas antes de decidir.",
+      rateAsOf: "Referencia base del modulo",
+      rateConfidence: "estimated",
+      rateSourceTitle: profile.sources[1]?.title ?? profile.sources[0]?.title,
+      rateSourceUrl: profile.sources[1]?.url ?? profile.sources[0]?.url,
+      rateNote:
+        "Tarifa estimada del catálogo base. No debe tratarse como tarifa publicada exacta del hotel; úsala solo si la búsqueda no consigue una fuente verificable.",
       note: competitor.note,
       differentiationIdeas: metadata.differentiationIdeas,
       sourceTitle: profile.sources[1]?.title ?? profile.sources[0]?.title,
@@ -1075,7 +1083,7 @@ export function buildFallbackBenchmarkReport(input: HotelBenchmarkSearchInput): 
     ? {
         title: effectiveHotels[0].sourceTitle,
         url: effectiveHotels[0].sourceUrl,
-        note: "Fuente base del benchmark local usado cuando Gemini no completa la búsqueda."
+        note: "Fuente base del benchmark local usado cuando la búsqueda asistida no completa la información."
       }
     : profile.sources[0];
 
@@ -1100,7 +1108,7 @@ export function buildFallbackBenchmarkReport(input: HotelBenchmarkSearchInput): 
     ],
     sources: profile.sources,
     mode: "mock",
-    warning: "Gemini no completó la búsqueda comparativa. Se muestra un benchmark base del módulo."
+    warning: "La búsqueda comparativa no se completó. Se muestra un benchmark base del módulo."
   };
 }
 

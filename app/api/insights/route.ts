@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       if (payload.strict) {
         return NextResponse.json(
           {
-            error: "Gemini no está configurado en el servidor. El informe final requiere IA activa."
+            error: "La IA no está configurada en el servidor. El informe final requiere IA activa."
           },
           { status: 503 }
         );
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         insights: {
           ...fallbackInsights,
-          fallbackReason: "GEMINI_API_KEY no está configurada en el servidor."
+          fallbackReason: "La credencial de IA no está configurada en el servidor."
         },
         mode: "mock"
       });
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
         warning: groundedContextWarning
       });
     } catch (providerError) {
-      console.error("[insights] gemini generation failed", providerError);
+      console.error("[insights] AI generation failed", providerError);
       if (payload.research) {
         const researchBackedInsights = generateResearchBackedInsights(
           payload.input,

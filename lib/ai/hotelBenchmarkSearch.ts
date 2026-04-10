@@ -13,10 +13,10 @@ import type {
 } from "@/types";
 
 const roomRatesSchema = z.object({
-  single: z.number().min(1),
-  double: z.number().min(1),
-  triple: z.number().min(1),
-  suite: z.number().min(1)
+  single: z.number().min(0),
+  double: z.number().min(0),
+  triple: z.number().min(0),
+  suite: z.number().min(0)
 });
 
 const hotelSchema = z.object({
@@ -29,6 +29,13 @@ const hotelSchema = z.object({
   services: z.array(z.string().min(3)).min(2).max(5),
   facilities: z.array(z.string().min(3)).min(2).max(5),
   rates: roomRatesSchema,
+  rateCurrency: z.string().min(3).default("USD"),
+  rateBasis: z.string().min(6),
+  rateAsOf: z.string().min(4),
+  rateConfidence: z.enum(["published", "package", "estimated", "unverified"]),
+  rateSourceTitle: z.string().min(3),
+  rateSourceUrl: z.string().url(),
+  rateNote: z.string().min(10),
   note: z.string().min(16),
   differentiationIdeas: z.array(z.string().min(12)).min(2).max(4),
   sourceTitle: z.string().min(3),
@@ -79,6 +86,13 @@ const benchmarkResponseSchema = {
             },
             required: ["single", "double", "triple", "suite"]
           },
+          rateCurrency: { type: "STRING" },
+          rateBasis: { type: "STRING" },
+          rateAsOf: { type: "STRING" },
+          rateConfidence: { type: "STRING", enum: ["published", "package", "estimated", "unverified"] },
+          rateSourceTitle: { type: "STRING" },
+          rateSourceUrl: { type: "STRING" },
+          rateNote: { type: "STRING" },
           note: { type: "STRING" },
           differentiationIdeas: { type: "ARRAY", items: { type: "STRING" } },
           sourceTitle: { type: "STRING" },
@@ -94,6 +108,13 @@ const benchmarkResponseSchema = {
           "services",
           "facilities",
           "rates",
+          "rateCurrency",
+          "rateBasis",
+          "rateAsOf",
+          "rateConfidence",
+          "rateSourceTitle",
+          "rateSourceUrl",
+          "rateNote",
           "note",
           "differentiationIdeas",
           "sourceTitle",
@@ -167,7 +188,7 @@ function extractGroundingSources(response: unknown) {
       return {
         title,
         url,
-        note: "Fuente capturada desde búsqueda grounded de Gemini para la comparativa hotelera."
+        note: "Fuente capturada desde búsqueda web asistida para la comparativa hotelera."
       };
     })
     .filter((item): item is ResearchSource => Boolean(item))
@@ -189,11 +210,19 @@ function isUsableSourceUrl(url?: string) {
 }
 
 function normalizeRates(input: HotelRoomRates, fallback: HotelRoomRates): HotelRoomRates {
+  const rawRates = {
+    single: Number.isFinite(input.single) && input.single > 0 ? input.single : 0,
+    double: Number.isFinite(input.double) && input.double > 0 ? input.double : 0,
+    triple: Number.isFinite(input.triple) && input.triple > 0 ? input.triple : 0,
+    suite: Number.isFinite(input.suite) && input.suite > 0 ? input.suite : 0
+  };
+  const anchor = rawRates.double || (rawRates.single ? rawRates.single / 0.8 : 0) || (rawRates.triple ? rawRates.triple / 1.25 : 0) || (rawRates.suite ? rawRates.suite / 1.75 : 0) || fallback.double;
+
   return {
-    single: Number.isFinite(input.single) && input.single > 0 ? input.single : fallback.single,
-    double: Number.isFinite(input.double) && input.double > 0 ? input.double : fallback.double,
-    triple: Number.isFinite(input.triple) && input.triple > 0 ? input.triple : fallback.triple,
-    suite: Number.isFinite(input.suite) && input.suite > 0 ? input.suite : fallback.suite
+    single: Math.round(rawRates.single || fallback.single || anchor * 0.8),
+    double: Math.round(rawRates.double || fallback.double || anchor),
+    triple: Math.round(rawRates.triple || fallback.triple || anchor * 1.25),
+    suite: Math.round(rawRates.suite || fallback.suite || anchor * 1.75)
   };
 }
 
@@ -223,7 +252,7 @@ async function repairBenchmarkPayload(client: GoogleGenAI, model: string, rawOut
   const repairedOutput = extractResponseText(repairResponse);
 
   if (!repairedOutput) {
-    throw new Error("Gemini no devolvió una reparación válida para el benchmark hotelero.");
+    throw new Error("El proveedor de IA no devolvió una reparación válida para el benchmark hotelero.");
   }
 
   return parseGeminiJson(repairedOutput);
@@ -245,7 +274,7 @@ async function generateStructuredBenchmark(client: GoogleGenAI, model: string, p
     const rawOutput = extractResponseText(response);
 
     if (!rawOutput) {
-      throw new Error("Gemini no devolvió una respuesta estructurada para el benchmark hotelero.");
+      throw new Error("El proveedor de IA no devolvió una respuesta estructurada para el benchmark hotelero.");
     }
 
     return rawOutput;
@@ -292,6 +321,16 @@ function collectSources(hotels: HotelReferenceHotel[], signals: HotelTouristStat
         note: `Fuente de referencia para ${hotel.name} dentro del benchmark comparativo.`
       });
     }
+
+    if (hotel.rateSourceTitle && hotel.rateSourceUrl && isUsableSourceUrl(hotel.rateSourceUrl)) {
+      collected.push({
+        title: hotel.rateSourceTitle,
+        url: hotel.rateSourceUrl,
+        note: hotel.rateAsOf
+          ? `Fuente de tarifa para ${hotel.name}. Base: ${hotel.rateBasis ?? "no especificada"}. Fecha/base: ${hotel.rateAsOf}.`
+          : `Fuente de tarifa para ${hotel.name}. Base: ${hotel.rateBasis ?? "no especificada"}.`
+      });
+    }
   }
 
   for (const signal of signals) {
@@ -317,7 +356,7 @@ export async function searchHotelBenchmarks(
 
   if (!isGeminiConfigured()) {
     if (requireGemini) {
-      throw new Error("Gemini no está configurado en el servidor. Define GEMINI_API_KEY o GOOGLE_API_KEY y reinicia Next.js.");
+      throw new Error("La IA no está configurada en el servidor. Revisa la credencial del proveedor y reinicia Next.js.");
     }
 
     return fallback;
@@ -351,6 +390,10 @@ Objetivo:
 Reglas:
 - prioriza fuentes oficiales del hotel, Chile Travel, SERNATUR, INE, Subsecretaría de Turismo y OTA solo como apoyo si falta dato directo
 - no inventes tarifas ni estrellas exactas si no están sustentadas
+- las tarifas deben venir de página oficial de reservas del hotel u OTA reconocida; si el hotel solo publica paquetes all-inclusive o tarifa por persona, indícalo como package y explica la base
+- si no encuentras tarifa pública exacta para single/doble/triple/suite, estima una tarifa competitiva de referencia usando comparables del destino, pero marca rateConfidence="estimated" y explica el método
+- si la fuente es paquete por persona o all-inclusive, usa el valor público como referencia competitiva y marca rateConfidence="package"
+- nunca devuelvas 0 en tarifas: este benchmark debe servir para comparar competencia de mercado con números
 - si un dato no aparece, deja la señal breve y concreta sin rellenar con ficción
 - enfócate en hoteles comparables con ${input.stars ? `${input.stars} estrellas` : "categoría premium"} y tipo ${input.hotelType || "similar al filtro"}
 - piensa esta salida para una tabla comparativa y decisiones de benchmarking.`,
@@ -377,7 +420,12 @@ ${effectiveMemo.slice(0, 8000)}
 
 Instrucciones:
 - overview: 2 o 3 frases sobre cómo se ve el benchmark de esta zona.
-- hotels: 3 a 6 hoteles comparables reales. municipality y area deben ser concretos. hotelType debe ser corto. stars debe ser numérico. rates en USD si hay base pública o estimación sustentada por el memo. services y facilities máximo 4 ítems cada uno. differentiationIdeas: 2 a 4 ideas breves por hotel. sourceTitle y sourceUrl obligatorios.
+- hotels: 3 a 6 hoteles comparables reales. municipality y area deben ser concretos. hotelType debe ser corto. stars debe ser numérico. rates debe usar USD y contener una referencia competitiva para single/doble/triple/suite. Nunca uses 0. Si no hay tarifa exacta por habitación, estima desde el set competitivo y explícalo en rateNote. rateConfidence debe ser:
+  - "published" si es tarifa pública por habitación/noche.
+  - "package" si la fuente muestra paquete, all-inclusive o tarifa por persona/noche.
+  - "estimated" solo si el memo entrega una estimación clara y sustentada.
+  - "unverified" solo si la fuente es débil, pero igualmente debes entregar una referencia numérica competitiva.
+  rateBasis debe decir si es por habitación/noche, por persona/noche, paquete, all-inclusive, fecha de búsqueda o base equivalente. rateSourceTitle y rateSourceUrl deben apuntar a la fuente específica de tarifa. rateNote debe explicar límites del dato. services y facilities máximo 4 ítems cada uno. differentiationIdeas: 2 a 4 ideas breves por hotel. sourceTitle y sourceUrl obligatorios.
 - marketSignals: 2 a 4 señales reales del mercado con fuente visible. Prioriza INE, Subsecretaría de Turismo, SERNATUR o fuentes oficiales.
 - commonPatterns: 3 a 5 patrones repetidos del benchmark.
 - differentiationIdeas: 3 a 5 propuestas globales para diferenciar un nuevo hotel frente a este set.
@@ -398,12 +446,19 @@ Instrucciones:
       positioning: hotel.positioning,
       services: hotel.services.slice(0, 5),
       facilities: hotel.facilities.slice(0, 5),
-      rates: normalizeRates(hotel.rates, fallback.hotels[0]?.rates ?? fallback.hotels[0]?.rates ?? {
+      rates: normalizeRates(hotel.rates, fallback.hotels[index]?.rates ?? fallback.hotels[0]?.rates ?? {
         single: 200,
         double: 300,
         triple: 380,
         suite: 520
       }),
+      rateCurrency: hotel.rateCurrency || "USD",
+      rateBasis: hotel.rateBasis,
+      rateAsOf: hotel.rateAsOf,
+      rateConfidence: hotel.rateConfidence,
+      rateSourceTitle: hotel.rateSourceTitle,
+      rateSourceUrl: isUsableSourceUrl(hotel.rateSourceUrl) ? hotel.rateSourceUrl : undefined,
+      rateNote: hotel.rateNote,
       note: hotel.note,
       differentiationIdeas: hotel.differentiationIdeas.slice(0, 4),
       sourceTitle: hotel.sourceTitle,

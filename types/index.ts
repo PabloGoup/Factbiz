@@ -359,6 +359,13 @@ export type HotelReferenceHotel = {
   services: string[];
   facilities: string[];
   rates: HotelRoomRates;
+  rateCurrency?: string;
+  rateBasis?: string;
+  rateAsOf?: string;
+  rateConfidence?: "published" | "package" | "estimated" | "unverified";
+  rateSourceTitle?: string;
+  rateSourceUrl?: string;
+  rateNote?: string;
   note: string;
   differentiationIdeas: string[];
   sourceTitle?: string;
@@ -481,6 +488,10 @@ export type HotelForecastSummary = {
 export type HotelRecommendation = {
   title: string;
   text: string;
+  rationale: string;
+  evidence: string;
+  expectedImpact: string;
+  nextAction: string;
   tone?: "emerald" | "amber" | "slate";
 };
 

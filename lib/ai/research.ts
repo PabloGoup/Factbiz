@@ -220,7 +220,7 @@ function extractGroundingSources(response: unknown) {
       return {
         title,
         url,
-        note: "Fuente capturada desde búsqueda grounded de Gemini durante la investigación del caso."
+        note: "Fuente capturada desde búsqueda web asistida durante la investigación del caso."
       };
     })
     .filter((item): item is { title: string; url: string; note: string } => Boolean(item))
@@ -279,7 +279,7 @@ async function repairResearchPayload<T>(
   const repairedOutput = extractResponseText(repairResponse);
 
   if (!repairedOutput) {
-    throw new Error("Gemini no devolvió una reparación válida del expediente de investigación.");
+    throw new Error("El proveedor de IA no devolvió una reparación válida del expediente de investigación.");
   }
 
   return parseGeminiJson<T>(repairedOutput);
@@ -308,7 +308,7 @@ async function generateStructuredResearchSection<T>(
     const rawOutput = extractResponseText(response);
 
     if (!rawOutput) {
-      throw new Error("Gemini no devolvió contenido estructurado para la investigación.");
+      throw new Error("El proveedor de IA no devolvió contenido estructurado para la investigación.");
     }
 
     return rawOutput;
@@ -426,7 +426,7 @@ function normalizeResearchDossier(
       const normalizedNote =
         source.note.trim().length >= 12
           ? source.note.trim()
-          : "Referencia usada por Gemini durante la investigación académica del caso.";
+          : "Referencia usada durante la investigación académica del caso.";
 
       if (acc.some((item) => item.url === source.url)) return acc;
       acc.push({
@@ -438,19 +438,19 @@ function normalizeResearchDossier(
     }, [])
     .concat([
       {
-        title: "Investigación grounded de Gemini",
-        url: "https://ai.google.dev/gemini-api/docs",
+        title: "Investigación web asistida",
+        url: "https://ai.google.dev/",
         note: "Fuente de respaldo para la investigación asistida cuando la búsqueda no devuelve suficientes referencias estructuradas."
       },
       {
-        title: "Documentación oficial de Gemini API",
-        url: "https://ai.google.dev/gemini-api/docs/models",
+        title: "Documentación oficial del proveedor de IA",
+        url: "https://ai.google.dev/",
         note: "Referencia metodológica del proveedor de IA usado para estructurar el expediente investigado."
       },
       {
-        title: "Google AI Studio",
-        url: "https://aistudio.google.com/",
-        note: "Entorno usado para la investigación grounded y validación del flujo de generación."
+        title: "Referencia metodológica de IA",
+        url: "https://ai.google.dev/",
+        note: "Referencia usada para la investigación asistida y validación del flujo de generación."
       }
     ])
     .reduce<Array<{ title: string; url: string; note: string }>>((acc, source) => {
@@ -496,7 +496,7 @@ function normalizeResearchDossier(
         sourceTitles:
           clampSourceTitles(finding.sourceTitles).length > 0
             ? clampSourceTitles(finding.sourceTitles)
-            : ["Investigación grounded de Gemini"]
+            : ["Investigación web asistida"]
       })),
     sources,
     scoringInferences: base.scoringInferences
@@ -522,7 +522,7 @@ function normalizeResearchDossier(
         sourceTitles:
           clampSourceTitles(inference.sourceTitles).length > 0
             ? clampSourceTitles(inference.sourceTitles)
-            : ["Investigación grounded de Gemini"]
+            : ["Investigación web asistida"]
       })),
     inferredProjectPatch: base.inferredProjectPatch ?? {},
     inferredLocationSignals: {
@@ -623,7 +623,7 @@ function fallbackFindings(query: string, sections: ResearchDossier["sections"], 
   const sourceTitles =
     groundedSources.slice(0, 3).map((source) => source.title).filter(Boolean).length > 0
       ? groundedSources.slice(0, 3).map((source) => source.title).filter(Boolean)
-      : ["Investigación grounded de Gemini"];
+      : ["Investigación web asistida"];
 
   return [
     {
@@ -675,49 +675,49 @@ function fallbackScoringBundle(inputDraft: ProjectInput, query: string) {
         variable: "competitivePressure",
         value: "7",
         rationale: "La investigación preliminar sugiere una rivalidad relevante en el mercado objetivo.",
-        sourceTitles: ["Investigación grounded de Gemini"]
+        sourceTitles: ["Investigación web asistida"]
       },
       {
         variable: "marketAttractiveness",
         value: "6",
         rationale: "El mercado parece defendible, pero todavía condicionado por ejecución, posicionamiento y entrada selectiva.",
-        sourceTitles: ["Investigación grounded de Gemini"]
+        sourceTitles: ["Investigación web asistida"]
       },
       {
         variable: "regulatoryEase",
         value: "5",
         rationale: "La apertura exige revisar barreras y permisos, por lo que la facilidad regulatoria no puede asumirse alta.",
-        sourceTitles: ["Investigación grounded de Gemini"]
+        sourceTitles: ["Investigación web asistida"]
       },
       {
         variable: "expectedDemand",
         value: "6",
         rationale: "La demanda potencial luce razonable, aunque todavía no está validada con evidencia comercial directa del proyecto.",
-        sourceTitles: ["Investigación grounded de Gemini"]
+        sourceTitles: ["Investigación web asistida"]
       },
       {
         variable: "substituteThreat",
         value: String(isFood ? 8 : 6),
         rationale: "Existen alternativas de consumo o formatos sustitutos que presionan la captura de demanda inicial.",
-        sourceTitles: ["Investigación grounded de Gemini"]
+        sourceTitles: ["Investigación web asistida"]
       },
       {
         variable: "entryBarriers",
         value: "5",
         rationale: "La entrada al mercado no es imposible, pero sí requiere capital, ubicación, permisos y ejecución disciplinada.",
-        sourceTitles: ["Investigación grounded de Gemini"]
+        sourceTitles: ["Investigación web asistida"]
       },
       {
         variable: "customerPower",
         value: "7",
         rationale: "El cliente tiene capacidad de comparar opciones, precios y conveniencia antes de elegir.",
-        sourceTitles: ["Investigación grounded de Gemini"]
+        sourceTitles: ["Investigación web asistida"]
       },
       {
         variable: "differentiationLevel",
         value: "6",
         rationale: "La diferenciación es plausible, pero debe traducirse en una propuesta realmente visible para el mercado objetivo.",
-        sourceTitles: ["Investigación grounded de Gemini"]
+        sourceTitles: ["Investigación web asistida"]
       }
     ],
     inferredProjectPatch: {
@@ -785,7 +785,7 @@ export async function runAcademicResearch(
   query: string
 ): Promise<EvaluationSnapshot> {
   if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY no está configurada.");
+    throw new Error("La credencial de IA no está configurada.");
   }
 
   const inputDraft = mergeProjectDraft(draft);
@@ -807,7 +807,7 @@ export async function runAcademicResearch(
   const groundedSources = extractGroundingSources(researchMemoResponse);
 
   if (!researchMemo) {
-    throw new Error("Gemini no devolvió una investigación base para el proyecto.");
+    throw new Error("El proveedor de IA no devolvió una investigación base para el proyecto.");
   }
 
   const researchContext = `Consulta original: ${query}
@@ -1037,9 +1037,9 @@ ${researchContext}`,
           : [
               ...groundedSources,
               {
-                title: "Investigación grounded de Gemini",
-                url: "https://ai.google.dev/gemini-api/docs",
-                note: "Referencia de respaldo cuando Gemini entrega investigación basada en búsqueda pero no estructura fuentes completas."
+                title: "Investigación web asistida",
+                url: "https://ai.google.dev/",
+                note: "Referencia de respaldo cuando la búsqueda asistida entrega investigación basada en web pero no estructura fuentes completas."
               }
             ]
     };

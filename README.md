@@ -81,7 +81,7 @@ npm run build
 
 Para la versión base no requiere variables de entorno.
 
-Si quieres usar la experiencia conversacional con Gemini real, agrega:
+Si quieres usar la experiencia conversacional con IA real, agrega:
 
 ```bash
 GEMINI_API_KEY=tu_api_key
@@ -143,7 +143,7 @@ La lógica actual está en:
 Hoy soporta:
 
 - insights mock locales
-- insights reales con Gemini
+- insights reales con IA
 - entrevista guiada por IA para construir el proyecto
 
 Ambos modos trabajan sobre:

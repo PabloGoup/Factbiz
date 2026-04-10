@@ -397,7 +397,7 @@ export async function importProjectFromText(
       missingFields = aiResult.missingFields;
       mode = "gemini";
     } catch (error) {
-      note = `Se usó extracción local porque Gemini no pudo estructurar el documento: ${describeGeminiError(error)}`;
+      note = `Se usó extracción local porque la IA no pudo estructurar el documento: ${describeGeminiError(error)}`;
     }
   }
 
@@ -410,7 +410,7 @@ export async function importProjectFromText(
         insights: await generateGeminiInsights(snapshot.input, snapshot.context, snapshot.scoreBreakdown)
       };
     } catch {
-      // Keep the locally generated insight package if Gemini fails at this step.
+      // Keep the locally generated insight package if the provider fails at this step.
     }
   }
 

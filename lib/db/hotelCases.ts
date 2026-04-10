@@ -117,6 +117,27 @@ export async function updateHotelCaseRecord(
   return mapRowToRecord(data);
 }
 
+export async function deleteHotelCaseRecord(id: string, userId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("hotel_cases")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    throw new Error(`No fue posible eliminar el caso hotelero en Supabase: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("No se encontró el caso hotelero o no pertenece al usuario actual.");
+  }
+
+  return data.id;
+}
+
 export async function listHotelCaseRecords(filters: {
   userId: string;
   search?: string;

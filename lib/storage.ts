@@ -164,6 +164,10 @@ export function setStoredHotelResult(result: HotelCaseResult) {
   writeStorage(STORAGE_KEYS.hotelResult, result);
 }
 
+export function clearStoredHotelResult() {
+  removeStorage(STORAGE_KEYS.hotelResult);
+}
+
 export function getStoredHotelBenchmarkFilters(fallback: HotelBenchmarkSearchInput) {
   return readStorage<HotelBenchmarkSearchInput>(STORAGE_KEYS.hotelBenchmarkFilters, fallback);
 }

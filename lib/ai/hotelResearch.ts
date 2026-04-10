@@ -332,7 +332,7 @@ function extractGroundingSources(response: unknown) {
       return {
         title,
         url,
-        note: "Fuente capturada desde búsqueda grounded de Gemini para el caso hotelero."
+        note: "Fuente capturada desde búsqueda web asistida para el caso hotelero."
       };
     })
     .filter((item): item is ResearchSource => Boolean(item))
@@ -532,7 +532,7 @@ async function generateStructuredHotelResearch(
       const text = extractResponseText(response);
 
       if (!text) {
-        throw new Error("Gemini no devolvió una respuesta estructurada para el caso hotelero.");
+        throw new Error("El proveedor de IA no devolvió una respuesta estructurada para el caso hotelero.");
       }
 
       return text;
@@ -553,7 +553,7 @@ async function generateStructuredHotelResearch(
       const repairedOutput = extractResponseText(repairResponse);
 
       if (!repairedOutput) {
-        throw new Error("Gemini no devolvió una reparación válida para el informe hotelero.");
+        throw new Error("El proveedor de IA no devolvió una reparación válida para el informe hotelero.");
       }
 
       return parseGeminiJson(repairedOutput);
@@ -700,7 +700,7 @@ Reglas:
     }
 
     Object.assign(merged, section.fallback);
-    warnings.push(`Se uso referencia base del destino en ${section.label} porque Gemini devolvio JSON invalido o truncado.`);
+    warnings.push(`Se uso referencia base del destino en ${section.label} porque la IA devolvio JSON invalido o truncado.`);
   });
 
   return {
@@ -721,7 +721,7 @@ export async function generateHotelResearch(
 
   if (!isGeminiConfigured()) {
     if (requireGemini) {
-      throw new Error("Gemini no está configurado en el servidor. Define GEMINI_API_KEY o GOOGLE_API_KEY y reinicia Next.js.");
+      throw new Error("La IA no está configurada en el servidor. Revisa la credencial del proveedor y reinicia Next.js.");
     }
 
     return fallback;
@@ -880,7 +880,7 @@ Instrucciones:
       warning: warnings.length > 0 ? warnings.join(" ") : undefined
     };
   } catch (error) {
-    console.error("[hotelResearch] Gemini error:", error);
+    console.error("[hotelResearch] AI provider error:", error);
 
     if (requireGemini) {
       throw new Error(describeGeminiError(error, { fallbackUsed: false }));

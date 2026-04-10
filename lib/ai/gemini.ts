@@ -566,7 +566,7 @@ export function createGeminiClient() {
 
   if (!apiKey) {
     throw new Error(
-      `No se encontró credencial de Gemini. Configura una de estas variables: ${GEMINI_API_KEY_ENV_CANDIDATES.join(", ")}.`
+      "No se encontró credencial de IA. Revisa la configuración del proveedor en el servidor."
     );
   }
 
@@ -585,7 +585,7 @@ export function describeGeminiError(error: unknown, options?: { fallbackUsed?: b
     normalized.includes("no longer available to new users") ||
     normalized.includes("update your code to use a newer model")
   ) {
-    return `El modelo configurado de Gemini ya no está disponible.${fallbackSuffix}`;
+    return `El modelo configurado de IA ya no está disponible.${fallbackSuffix}`;
   }
 
   if (
@@ -594,22 +594,22 @@ export function describeGeminiError(error: unknown, options?: { fallbackUsed?: b
     normalized.includes("quota") ||
     normalized.includes("rate limit")
   ) {
-    return `Gemini no estuvo disponible por límite de cuota.${fallbackSuffix}`;
+    return `La IA no estuvo disponible por límite de cuota.${fallbackSuffix}`;
   }
 
   if (normalized.includes("permission_denied") || normalized.includes("project has been denied access")) {
-    return "El proyecto asociado a la API key de Gemini fue rechazado por Google. Debes crear una nueva API key o usar otro proyecto habilitado.";
+    return "El proyecto asociado a la API key fue rechazado por el proveedor. Debes crear una nueva API key o usar otro proyecto habilitado.";
   }
 
   if (normalized.includes("401") || normalized.includes("403") || normalized.includes("api key")) {
-    return `Gemini no pudo autenticarse con la credencial configurada.${fallbackSuffix}`;
+    return `La IA no pudo autenticarse con la credencial configurada.${fallbackSuffix}`;
   }
 
   if (normalized.includes("network") || normalized.includes("fetch") || normalized.includes("timeout")) {
-    return `Gemini no respondió por un problema de red o tiempo de espera.${fallbackSuffix}`;
+    return `La IA no respondió por un problema de red o tiempo de espera.${fallbackSuffix}`;
   }
 
-  return `Gemini no respondió correctamente.${fallbackSuffix}${detail}`;
+  return `La IA no respondió correctamente.${fallbackSuffix}${detail}`;
 }
 
 async function repairGeminiInsightsPayload(
@@ -633,7 +633,7 @@ async function repairGeminiInsightsPayload(
   const repairedOutput = extractGeminiResponseText(repairResponse);
 
   if (!repairedOutput) {
-    throw new Error("Gemini no devolvió una reparación válida del JSON de insights.");
+    throw new Error("El proveedor de IA no devolvió una reparación válida del JSON de insights.");
   }
 
   return parseGeminiJson(repairedOutput);
@@ -662,7 +662,7 @@ async function generateStructuredSection<T>(
     const rawOutput = extractGeminiResponseText(response);
 
     if (!rawOutput) {
-      throw new Error("Gemini no devolvió contenido estructurado.");
+      throw new Error("El proveedor de IA no devolvió contenido estructurado.");
     }
 
     return rawOutput;

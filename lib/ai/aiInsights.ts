@@ -911,7 +911,7 @@ export function generateMockAiInsights(
           ? "El proyecto puede avanzar en formato piloto, condicionado a resolver fricciones clave antes de una expansión mayor."
           : "La recomendación es no avanzar con la configuración actual sin rediseñar la propuesta, el alcance o la estructura económica.",
     methodologyNote:
-      "Este resultado fue generado por la capa local de simulación. Si se configura Gemini, la app puede reemplazar esta salida por un análisis redactado por modelo real.",
+      "Este resultado fue generado por la capa local de simulación. Si se configura IA, la app puede reemplazar esta salida por un análisis redactado por modelo real.",
     reportNarrative: buildReportNarrative(input, context, scoreBreakdown),
     source: "mock",
     provider: "local-rules",
@@ -953,7 +953,7 @@ export function generateResearchBackedInsights(
     principalRisks: scoreBreakdown.risks.slice(0, 6),
     conclusion: research.sections.conclusion,
     methodologyNote:
-      "El informe final se construyó a partir del dossier de investigación generado por Gemini y luego se sintetizó con el motor de scoring de factibilidad.",
+      "El informe final se construyó a partir del dossier de investigación asistida y luego se sintetizó con el motor de scoring de factibilidad.",
     reportNarrative,
     source: "gemini",
     provider: "gemini-research-fallback",

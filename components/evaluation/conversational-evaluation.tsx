@@ -100,7 +100,7 @@ async function upgradeSnapshotInsights(snapshot: EvaluationSnapshot) {
 
   if (!response.ok) {
     const payload = (await response.json()) as { error?: string };
-    throw new Error(payload.error ?? "No fue posible generar el informe con Gemini.");
+    throw new Error(payload.error ?? "No fue posible generar el informe con IA.");
   }
 
   const payload = (await response.json()) as {
@@ -490,7 +490,7 @@ export function ConversationalEvaluation({ demoId }: { demoId?: string }) {
               Investigar, estructurar, puntuar
             </h3>
             <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              Este modo usa Gemini para investigar el caso, reunir hallazgos con fuentes, inferir variables cuantificables
+              Este modo usa IA para investigar el caso, reunir hallazgos con fuentes, inferir variables cuantificables
               y alimentar el scoring final. Luego construye el dashboard ejecutivo con esa base investigada.
             </p>
             <div className="mt-5 grid gap-3">

@@ -1,7 +1,8 @@
 "use client";
 
 import type { ComponentType } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   BedDouble,
   BookOpenText,
@@ -19,7 +20,8 @@ import {
   RefreshCcw,
   Save,
   Sparkles,
-  Target
+  Target,
+  Trash2
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,7 @@ import {
   HOTEL_DESTINATION_PROFILES
 } from "@/lib/hotel/data";
 import {
+  clearStoredHotelResult,
   getStoredHotelBenchmarkFilters,
   getStoredHotelBenchmarkResult,
   getStoredHotelCase,
@@ -53,6 +56,7 @@ import type {
   HotelCaseInput,
   HotelCaseResult,
   HotelReferenceHotel,
+  HotelRecommendation,
   HotelSalesChannelId,
   SavedHotelCaseListItem,
   SavedHotelCaseRecord
@@ -220,6 +224,66 @@ function Highlight({
   );
 }
 
+function RecommendationDecisionCard({ recommendation, index }: { recommendation: HotelRecommendation; index: number }) {
+  const toneClass =
+    recommendation.tone === "amber"
+      ? "border-amber-200 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/30"
+      : recommendation.tone === "emerald"
+        ? "border-emerald-200 bg-emerald-50/80 dark:border-emerald-900 dark:bg-emerald-950/30"
+        : "border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900";
+
+  return (
+    <div className={`rounded-3xl border p-5 ${toneClass}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+            Recomendación {index + 1}
+          </p>
+          <h3 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-50">{recommendation.title}</h3>
+        </div>
+        <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-950/80 dark:text-slate-300">
+          Acción sugerida
+        </span>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-slate-700 dark:text-slate-200">{recommendation.text}</p>
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+            Argumento
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {recommendation.rationale ?? recommendation.text}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+            Dato usado
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {recommendation.evidence ?? "La recomendación se basa en los resultados del forecast y el mix comercial."}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+            Proyección o mejora posible
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {recommendation.expectedImpact ?? "Impacto esperado: mejorar margen, ADR o control comercial si se ejecuta con seguimiento semanal."}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+            Próximo paso
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {recommendation.nextAction ?? "Definir responsable, plazo e indicador de seguimiento antes de implementar."}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TableCard({
   title,
   description,
@@ -312,10 +376,219 @@ function sortOptions(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((left, right) => left.localeCompare(right, "es"));
 }
 
-function averageRate(references: HotelReferenceHotel[], type: keyof HotelReferenceHotel["rates"]) {
-  if (!references.length) return 0;
+function hasUsableBenchmarkRate(reference: HotelReferenceHotel, type: keyof HotelReferenceHotel["rates"]) {
+  return Number.isFinite(reference.rates[type]) && reference.rates[type] > 0;
+}
 
-  return references.reduce((total, reference) => total + reference.rates[type], 0) / references.length;
+function averageRate(references: HotelReferenceHotel[], type: keyof HotelReferenceHotel["rates"]) {
+  const usableReferences = references.filter((reference) => hasUsableBenchmarkRate(reference, type));
+
+  if (!usableReferences.length) return 0;
+
+  return usableReferences.reduce((total, reference) => total + reference.rates[type], 0) / usableReferences.length;
+}
+
+function formatBenchmarkRate(reference: HotelReferenceHotel, type: keyof HotelReferenceHotel["rates"]) {
+  const value = reference.rates[type];
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return "Sin valor";
+  }
+
+  if (reference.rateConfidence === "estimated") {
+    return `Ref. ${formatUsd(value)}`;
+  }
+
+  if (reference.rateConfidence === "package") {
+    return `Paq. ${formatUsd(value)}`;
+  }
+
+  if (reference.rateConfidence === "unverified") {
+    return `Ref. ${formatUsd(value)}`;
+  }
+
+  return formatUsd(value);
+}
+
+function getRateConfidenceLabel(confidence?: HotelReferenceHotel["rateConfidence"]) {
+  switch (confidence) {
+    case "published":
+      return "Tarifa publicada";
+    case "package":
+      return "Paquete / all-inclusive";
+    case "estimated":
+      return "Referencia estimada";
+    case "unverified":
+      return "Referencia débil";
+    default:
+      return "Sin clasificar";
+  }
+}
+
+function getHotelCaseComparisonRows(records: SavedHotelCaseRecord[]) {
+  const [left, right] = records;
+
+  if (!left?.caseResult || !right?.caseResult) return [];
+
+  return [
+    {
+      label: "ADR",
+      kind: "money" as const,
+      left: left.caseResult.summary.weightedAverageAdr,
+      right: right.caseResult.summary.weightedAverageAdr,
+      insight: "Tarifa promedio lograda por habitación vendida."
+    },
+    {
+      label: "Ingreso neto",
+      kind: "money" as const,
+      left: left.caseResult.summary.totalNetRoomRevenue,
+      right: right.caseResult.summary.totalNetRoomRevenue,
+      insight: "Ingreso por habitaciones después de comisiones."
+    },
+    {
+      label: "Comisiones",
+      kind: "money" as const,
+      left: left.caseResult.summary.totalCommissions,
+      right: right.caseResult.summary.totalCommissions,
+      lowerIsBetter: true,
+      insight: "Costo comercial pagado a canales de venta."
+    },
+    {
+      label: "Desayuno extra",
+      kind: "money" as const,
+      left: left.caseResult.summary.totalBreakfastDelta,
+      right: right.caseResult.summary.totalBreakfastDelta,
+      insight: "Ingreso adicional por subir el precio del desayuno."
+    },
+    {
+      label: "Ocupación enero",
+      kind: "percent" as const,
+      left: left.caseInput.occupancyJanuary,
+      right: right.caseInput.occupancyJanuary,
+      insight: "Demanda esperada de enero."
+    },
+    {
+      label: "Ocupación febrero",
+      kind: "percent" as const,
+      left: left.caseInput.occupancyFebruary,
+      right: right.caseInput.occupancyFebruary,
+      insight: "Demanda esperada de febrero."
+    }
+  ];
+}
+
+function formatComparisonValue(value: number, kind: "money" | "percent") {
+  return kind === "money" ? formatUsd(value) : formatPercent(value);
+}
+
+function HotelComparisonVisuals({ records }: { records: SavedHotelCaseRecord[] }) {
+  const [left, right] = records;
+  const rows = getHotelCaseComparisonRows(records);
+
+  if (!left?.caseResult || !right?.caseResult || rows.length === 0) return null;
+
+  const financialData = rows
+    .filter((row) => row.kind === "money")
+    .map((row) => ({
+      metric: row.label,
+      left: row.left,
+      right: row.right
+    }));
+  const occupancyData = rows
+    .filter((row) => row.kind === "percent")
+    .map((row) => ({
+      metric: row.label.replace("Ocupación ", ""),
+      left: row.left,
+      right: row.right
+    }));
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+            Dinero y margen
+          </p>
+          <div className="mt-4 h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={financialData}>
+                <CartesianGrid vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="metric" tick={{ fill: "#64748b", fontSize: 11 }} />
+                <YAxis tick={{ fill: "#64748b", fontSize: 11 }} tickFormatter={(value) => `$${Number(value) / 1000}k`} />
+                <Tooltip formatter={(value) => formatUsd(Number(value))} />
+                <Legend />
+                <Bar dataKey="left" name={left.hotelName} fill="#0f172a" radius={[10, 10, 0, 0]} />
+                <Bar dataKey="right" name={right.hotelName} fill="#059669" radius={[10, 10, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+            Ocupación mensual
+          </p>
+          <div className="mt-4 h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={occupancyData}>
+                <CartesianGrid vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="metric" tick={{ fill: "#64748b", fontSize: 12 }} />
+                <YAxis domain={[0, 100]} tick={{ fill: "#64748b", fontSize: 11 }} tickFormatter={(value) => `${value}%`} />
+                <Tooltip formatter={(value) => formatPercent(Number(value))} />
+                <Legend />
+                <Bar dataKey="left" name={left.hotelName} fill="#0f172a" radius={[10, 10, 0, 0]} />
+                <Bar dataKey="right" name={right.hotelName} fill="#059669" radius={[10, 10, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-3">
+        {rows.map((row) => {
+          const maxValue = Math.max(row.left, row.right, 1);
+          const leftWins = row.lowerIsBetter ? row.left <= row.right : row.left >= row.right;
+          const rightWins = row.lowerIsBetter ? row.right <= row.left : row.right >= row.left;
+
+          return (
+            <div key={row.label} className="rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-950 dark:text-slate-50">{row.label}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{row.insight}</p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                  {row.lowerIsBetter ? "Menor es mejor" : "Mayor es mejor"}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                <div>
+                  <div className="flex justify-between gap-4 text-sm">
+                    <span className="truncate text-slate-600 dark:text-slate-300">{left.hotelName}</span>
+                    <span className={`font-semibold ${leftWins ? "text-emerald-600 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}`}>
+                      {formatComparisonValue(row.left, row.kind)}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-slate-100 dark:bg-slate-900">
+                    <div className="h-2 rounded-full bg-slate-950 dark:bg-slate-100" style={{ width: `${Math.max((row.left / maxValue) * 100, 4)}%` }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between gap-4 text-sm">
+                    <span className="truncate text-slate-600 dark:text-slate-300">{right.hotelName}</span>
+                    <span className={`font-semibold ${rightWins ? "text-emerald-600 dark:text-emerald-300" : "text-slate-600 dark:text-slate-300"}`}>
+                      {formatComparisonValue(row.right, row.kind)}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-slate-100 dark:bg-slate-900">
+                    <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${Math.max((row.right / maxValue) * 100, 4)}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function HotelCaseWorkbench() {
@@ -339,6 +612,7 @@ export function HotelCaseWorkbench() {
   const [savedCasesQuery, setSavedCasesQuery] = useState("");
   const [savedCasesDestination, setSavedCasesDestination] = useState<HotelCaseInput["destination"] | "">("");
   const [savingCase, setSavingCase] = useState(false);
+  const [deletingCaseId, setDeletingCaseId] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
   const [compareRecords, setCompareRecords] = useState<SavedHotelCaseRecord[]>([]);
@@ -348,6 +622,11 @@ export function HotelCaseWorkbench() {
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+
+  const clearCurrentResult = useCallback(() => {
+    setResult(null);
+    clearStoredHotelResult();
+  }, []);
 
   useEffect(() => {
     const storedCase = getStoredHotelCase(createDefaultHotelCase());
@@ -487,6 +766,42 @@ export function HotelCaseWorkbench() {
     }
   };
 
+  const deleteSavedCase = async (id: string, hotelName: string) => {
+    const confirmed = window.confirm(`¿Eliminar "${hotelName}" de la biblioteca? Esta acción no se puede deshacer.`);
+
+    if (!confirmed) return;
+
+    setDeletingCaseId(id);
+    setSavedCasesError(null);
+    setSaveMessage(null);
+
+    try {
+      const response = await fetch(`/api/hotel-cases/${id}`, {
+        method: "DELETE"
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "No fue posible eliminar el caso hotelero.");
+      }
+
+      setSavedCases((current) => current.filter((item) => item.id !== id));
+      setSelectedCompareIds((current) => current.filter((currentId) => currentId !== id));
+      setCompareRecords((current) => current.filter((record) => record.id !== id));
+
+      if (currentSavedCaseId === id) {
+        setCurrentSavedCaseId(null);
+        setSaveMessage(`Se eliminó ${hotelName}. El formulario queda disponible para guardarlo como un caso nuevo si lo necesitas.`);
+      } else {
+        setSaveMessage(`Se eliminó ${hotelName} de la biblioteca.`);
+      }
+    } catch (currentError) {
+      setSavedCasesError(currentError instanceof Error ? currentError.message : "No fue posible eliminar el caso hotelero.");
+    } finally {
+      setDeletingCaseId(null);
+    }
+  };
+
   const loadSavedCaseIntoWorkbench = async (id: string) => {
     setCompareLoading(true);
     setSavedCasesError(null);
@@ -512,7 +827,7 @@ export function HotelCaseWorkbench() {
     }
   };
 
-  const runCaseComparison = async (ids: string[]) => {
+  const runCaseComparison = useCallback(async (ids: string[]) => {
     if (ids.length !== 2) {
       setCompareRecords([]);
       return;
@@ -537,9 +852,15 @@ export function HotelCaseWorkbench() {
     } finally {
       setCompareLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void runCaseComparison(selectedCompareIds);
+  }, [hydrated, runCaseComparison, selectedCompareIds]);
 
   const updateCase = <K extends keyof HotelCaseInput>(key: K, value: HotelCaseInput[K]) => {
+    clearCurrentResult();
     setHotelCase((current) => ({
       ...current,
       [key]: value
@@ -547,6 +868,7 @@ export function HotelCaseWorkbench() {
   };
 
   const updateRoomMix = (key: keyof HotelCaseInput["roomMix"], value: number) => {
+    clearCurrentResult();
     setHotelCase((current) => ({
       ...current,
       roomMix: {
@@ -557,6 +879,7 @@ export function HotelCaseWorkbench() {
   };
 
   const updateRoomRate = (key: keyof HotelCaseInput["roomRates"], value: number) => {
+    clearCurrentResult();
     setHotelCase((current) => ({
       ...current,
       roomRates: {
@@ -567,6 +890,7 @@ export function HotelCaseWorkbench() {
   };
 
   const updateChannel = (channel: HotelSalesChannelId, field: "share" | "commission", value: number) => {
+    clearCurrentResult();
     setHotelCase((current) => ({
       ...current,
       channels: {
@@ -582,6 +906,7 @@ export function HotelCaseWorkbench() {
   const applyDestination = (destinationId: HotelCaseInput["destination"]) => {
     const profile = HOTEL_DESTINATION_PROFILES[destinationId];
 
+    clearCurrentResult();
     setHotelCase((current) => ({
       ...current,
       destination: destinationId,
@@ -603,8 +928,14 @@ export function HotelCaseWorkbench() {
   const applyReferenceToCase = (reference: HotelReferenceHotel) => {
     const profile = HOTEL_DESTINATION_PROFILES[reference.destination];
     const combinedServices = Array.from(new Set([...reference.services, ...reference.facilities])).join(", ");
-
     setSelectedBenchmarkId(reference.id);
+    setCurrentSavedCaseId(null);
+    clearCurrentResult();
+    setSaveMessage(
+      reference.rateConfidence === "published"
+        ? "Se armó un caso nuevo desde el benchmark con tarifas publicadas. Resuélvelo antes de guardarlo como caso resuelto."
+        : "Se armó un caso nuevo con tarifas de referencia competitiva. Revisa la base de tarifa, porque puede venir de paquete, all-inclusive o estimación de mercado."
+    );
     setBenchmarkFilters({
       country: reference.country,
       region: reference.region,
@@ -800,7 +1131,7 @@ export function HotelCaseWorkbench() {
               setSelectedBenchmarkId(null);
               setBenchmarkResult(null);
               setBenchmarkError(null);
-              setResult(null);
+              clearCurrentResult();
               setCurrentSavedCaseId(null);
               setError(null);
               setActiveTab("benchmarks");
@@ -849,7 +1180,7 @@ export function HotelCaseWorkbench() {
             />
             <GuideCard
               title="Entender mercado"
-              description="Gemini investiga destino, atractivos, competencia y tarifas de referencia."
+              description="Investiga destino, atractivos, competencia y tarifas de referencia."
               icon={FileSearch}
             />
             <GuideCard
@@ -950,76 +1281,133 @@ export function HotelCaseWorkbench() {
             </div>
           </Card>
 
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
             <Card>
               <SectionIntro
                 title="Casos disponibles"
                 description="Selecciona uno para cargarlo o marca dos casos resueltos para compararlos."
               />
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="text-slate-500 dark:text-slate-400">
-                    <tr>
-                      <th className="pb-3">Comparar</th>
-                      <th className="pb-3">Caso</th>
-                      <th className="pb-3">Destino</th>
-                      <th className="pb-3">Estado</th>
-                      <th className="pb-3">ADR</th>
-                      <th className="pb-3">Actualizado</th>
-                      <th className="pb-3">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {savedCases.map((item) => {
-                      const isChecked = selectedCompareIds.includes(item.id);
-                      const isLoaded = currentSavedCaseId === item.id;
+              <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                <SummaryMetric
+                  label="Total"
+                  value={String(savedCases.length)}
+                  helper="Casos visibles con los filtros actuales."
+                />
+                <SummaryMetric
+                  label="Resueltos"
+                  value={String(savedCases.filter((item) => item.status === "solved").length)}
+                  helper="Disponibles para comparación rápida."
+                />
+                <SummaryMetric
+                  label="Seleccionados"
+                  value={`${selectedCompareIds.length}/2`}
+                  helper="Marca dos casos resueltos para comparar."
+                />
+              </div>
+              <div className="space-y-3">
+                {savedCases.map((item) => {
+                  const isChecked = selectedCompareIds.includes(item.id);
+                  const isLoaded = currentSavedCaseId === item.id;
+                  const isSolved = item.status === "solved";
+                  const destinationLabel = HOTEL_DESTINATION_PROFILES[item.destination].label;
 
-                      return (
-                        <tr
-                          key={item.id}
-                          className={`border-t border-slate-200 dark:border-slate-800 ${
-                            isLoaded ? "bg-slate-50 dark:bg-slate-900" : ""
-                          }`}
-                        >
-                          <td className="py-3">
+                  return (
+                    <article
+                      key={item.id}
+                      className={`rounded-3xl border p-4 transition ${
+                        isLoaded
+                          ? "border-slate-900 bg-slate-50 shadow-sm dark:border-slate-100 dark:bg-slate-900"
+                          : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex min-w-0 gap-3">
+                          <label
+                            className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${
+                              isSolved
+                                ? "cursor-pointer border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
+                                : "cursor-not-allowed border-slate-200 bg-slate-100 opacity-60 dark:border-slate-800 dark:bg-slate-900"
+                            }`}
+                            title={isSolved ? "Marcar para comparar" : "Solo se comparan casos resueltos"}
+                          >
                             <input
                               type="checkbox"
+                              className="h-4 w-4 accent-slate-900"
                               checked={isChecked}
-                              disabled={item.status !== "solved" && !isChecked}
+                              disabled={!isSolved && !isChecked}
                               onChange={(event) => {
                                 const nextIds = event.target.checked
                                   ? [...selectedCompareIds, item.id].slice(-2)
                                   : selectedCompareIds.filter((currentId) => currentId !== item.id);
                                 setSelectedCompareIds(nextIds);
-                                void runCaseComparison(nextIds);
                               }}
                             />
-                          </td>
-                          <td className="py-3">
-                            <p className="font-medium text-slate-900 dark:text-slate-50">{item.hotelName}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {item.category} · {item.region}
-                              {isLoaded ? " · caso cargado" : ""}
+                          </label>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="break-words text-lg font-semibold text-slate-950 dark:text-slate-50">
+                                {item.hotelName}
+                              </h3>
+                              <span
+                                className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                                  isSolved
+                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                    : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                                }`}
+                              >
+                                {isSolved ? "Resuelto" : "Borrador"}
+                              </span>
+                              {isLoaded ? (
+                                <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white dark:bg-slate-100 dark:text-slate-950">
+                                  Cargado
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                              {item.category} · {item.region} · {destinationLabel}
                             </p>
-                          </td>
-                          <td className="py-3 text-slate-600 dark:text-slate-300">
-                            {HOTEL_DESTINATION_PROFILES[item.destination].label}
-                          </td>
-                          <td className="py-3 text-slate-600 dark:text-slate-300">{item.status === "solved" ? "Resuelto" : "Borrador"}</td>
-                          <td className="py-3 text-slate-600 dark:text-slate-300">
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <Button variant="secondary" onClick={() => void loadSavedCaseIntoWorkbench(item.id)} disabled={compareLoading}>
+                            Cargar
+                          </Button>
+                          <Button
+                            variant="danger"
+                            onClick={() => void deleteSavedCase(item.id, item.hotelName)}
+                            disabled={deletingCaseId === item.id}
+                            aria-label={`Eliminar ${item.hotelName}`}
+                          >
+                            {deletingCaseId === item.id ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="mr-2 h-4 w-4" />
+                            )}
+                            Eliminar
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-900">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">ADR</p>
+                          <p className="mt-1 text-base font-semibold text-slate-950 dark:text-slate-50">
                             {typeof item.weightedAverageAdr === "number" ? formatUsd(item.weightedAverageAdr) : "Sin resolver"}
-                          </td>
-                          <td className="py-3 text-slate-600 dark:text-slate-300">{formatDateTime(item.updatedAt)}</td>
-                          <td className="py-3">
-                            <Button variant="secondary" onClick={() => void loadSavedCaseIntoWorkbench(item.id)} disabled={compareLoading}>
-                              Cargar
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-900">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Actualizado</p>
+                          <p className="mt-1 text-sm font-semibold leading-5 text-slate-950 dark:text-slate-50">{formatDateTime(item.updatedAt)}</p>
+                        </div>
+                        <div className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-900">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Comparación</p>
+                          <p className="mt-1 text-sm font-semibold leading-5 text-slate-950 dark:text-slate-50">
+                            {isSolved ? (isChecked ? "Marcado para comparar" : "Disponible") : "Resolver primero"}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
               {!savedCases.length ? (
                 <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
@@ -1031,8 +1419,11 @@ export function HotelCaseWorkbench() {
             <Card>
               <SectionIntro
                 title="Comparación rápida"
-                description="Cuando selecciones dos casos resueltos, la app mostrará aquí una comparación ejecutiva."
+                description="Selecciona dos casos resueltos y la app mostrará gráficos, lectura ejecutiva y diferencias clave."
               />
+              <div className="mb-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                Seleccionados: <strong>{selectedCompareIds.length}/2</strong>. Solo se pueden comparar casos en estado `Resuelto`.
+              </div>
               {compareLoading ? (
                 <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1052,6 +1443,7 @@ export function HotelCaseWorkbench() {
                       />
                     ))}
                   </div>
+                  <HotelComparisonVisuals records={compareRecords} />
                   <div className="grid gap-4 md:grid-cols-2">
                     <Highlight
                       title="Lectura comparativa"
@@ -1166,7 +1558,9 @@ export function HotelCaseWorkbench() {
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                  Marca dos casos resueltos para compararlos aquí. Si cargas uno de ellos al formulario, puedes seguir editándolo con las pestañas normales del módulo.
+                  {selectedCompareIds.length === 2
+                    ? "La selección está lista, pero todavía no se cargaron los datos completos. Pulsa Actualizar biblioteca o vuelve a marcar los casos; si el problema sigue, revisa que la sesión esté iniciada."
+                    : "Marca dos casos resueltos para compararlos aquí. Si cargas uno de ellos al formulario, puedes seguir editándolo con las pestañas normales del módulo."}
                 </div>
               )}
             </Card>
@@ -1180,7 +1574,7 @@ export function HotelCaseWorkbench() {
             <SectionIntro
               step="Paso 0"
               title="Búsqueda comparativa"
-              description="Aquí haces la búsqueda competitiva antes de armar el caso. Gemini investiga la zona, propone comparables y organiza la salida para revisar tarifas, tipo de hotel y opciones de diferenciación."
+              description="Aquí haces la búsqueda competitiva antes de armar el caso. La app investiga la zona, propone comparables y organiza la salida para revisar tarifas, tipo de hotel y opciones de diferenciación."
             />
             <HelperDetails title="¿Cómo usar esta pestaña?" defaultOpen>
               Parte por región y, si quieres, acota por comuna, tipo de hotel y estrellas. Luego revisa la grilla de comparables y toma uno como base para completar el caso con menos fricción.
@@ -1192,7 +1586,7 @@ export function HotelCaseWorkbench() {
                     Filtros de búsqueda
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                    Esta búsqueda consulta Gemini y luego te devuelve una comparativa usable en tablas tipo grilla.
+                    Esta búsqueda consulta referencias de mercado y luego te devuelve una comparativa usable en tablas tipo grilla.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -1292,7 +1686,7 @@ export function HotelCaseWorkbench() {
                     </p>
                   </div>
                   <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                    {benchmarkResult.mode === "gemini" ? "Gemini" : "Fallback local"}
+                    {benchmarkResult.mode === "gemini" ? "Investigación activa" : "Referencia base"}
                   </div>
                 </div>
                 {benchmarkResult.warning ? (
@@ -1305,20 +1699,26 @@ export function HotelCaseWorkbench() {
                     helper="Cantidad de comparables detectados por la búsqueda."
                   />
                   <SummaryMetric
-                    label="ADR doble"
+                    label="Tarifa doble ref."
                     value={formatUsd(averageDoubleReferenceRate)}
-                    helper="Promedio de tarifa doble entre los comparables listados."
+                    helper="Promedio competitivo del set: puede mezclar tarifa publicada, paquete o estimación etiquetada."
                   />
                   <SummaryMetric
-                    label="ADR suite"
+                    label="Tarifa suite ref."
                     value={formatUsd(averageSuiteReferenceRate)}
-                    helper="Promedio de tarifa suite dentro del benchmark activo."
+                    helper="Referencia para comparar mercado, no necesariamente tarifa room-only exacta."
                   />
                   <SummaryMetric
                     label="Filtro"
                     value={starValueLabel}
                     helper={benchmarkFilters.municipality || benchmarkFilters.region || benchmarkFilters.country}
                   />
+                </div>
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                  <strong className="text-slate-950 dark:text-slate-50">Lectura de tarifas:</strong> siempre se muestra
+                  una referencia numérica para comparar competencia. Si ves Paq., el valor puede incluir
+                  all-inclusive, excursiones, traslados o precio por persona. Si ves Ref., es una tarifa de
+                  referencia estimada desde el set competitivo y debe revisarse antes de usarla como ADR final.
                 </div>
               </Card>
 
@@ -1330,7 +1730,7 @@ export function HotelCaseWorkbench() {
                     helperTitle="Cómo leer la grilla"
                     helperContent={
                       <>
-                        Selecciona una fila para ver más detalle al costado. La mejor forma de usar esta pantalla es elegir un benchmark principal y luego llevarlo al caso.
+                        La grilla muestra números porque el caso necesita comparación de mercado. La columna Confianza explica si el valor es publicado, paquete o referencia estimada.
                       </>
                     }
                   >
@@ -1344,6 +1744,7 @@ export function HotelCaseWorkbench() {
                           <th className="pb-3">Single</th>
                           <th className="pb-3">Doble</th>
                           <th className="pb-3">Suite</th>
+                          <th className="pb-3">Confianza</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1360,9 +1761,10 @@ export function HotelCaseWorkbench() {
                               <td className="py-3 text-slate-600 dark:text-slate-300">{reference.municipality}</td>
                               <td className="py-3 text-slate-600 dark:text-slate-300">{reference.hotelType}</td>
                               <td className="py-3 text-slate-600 dark:text-slate-300">{reference.stars}</td>
-                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(reference.rates.single)}</td>
-                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(reference.rates.double)}</td>
-                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(reference.rates.suite)}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatBenchmarkRate(reference, "single")}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatBenchmarkRate(reference, "double")}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatBenchmarkRate(reference, "suite")}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{getRateConfidenceLabel(reference.rateConfidence)}</td>
                             </tr>
                           );
                         })}
@@ -1414,8 +1816,22 @@ export function HotelCaseWorkbench() {
                     {selectedReference ? (
                       <>
                         <div className="mt-5 grid gap-3 md:grid-cols-2">
-                          <Highlight title="Tarifa doble" text={formatUsd(selectedReference.rates.double)} tone="emerald" />
+                          <Highlight title="Tarifa doble" text={formatBenchmarkRate(selectedReference, "double")} tone="emerald" />
                           <Highlight title="Producto" text={`${selectedReference.hotelType} · ${selectedReference.stars} estrellas`} />
+                        </div>
+                        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
+                          <p className="font-semibold text-slate-950 dark:text-slate-50">Base de tarifa</p>
+                          <p className="mt-2 leading-6 text-slate-600 dark:text-slate-300">
+                            {getRateConfidenceLabel(selectedReference.rateConfidence)} · {selectedReference.rateBasis ?? "Base no especificada"}
+                          </p>
+                          <p className="mt-2 leading-6 text-slate-600 dark:text-slate-300">
+                            {selectedReference.rateNote ?? "Valida esta tarifa en la fuente antes de usarla como supuesto final."}
+                          </p>
+                          <SourceBadge
+                            title={selectedReference.rateSourceTitle ?? selectedReference.sourceTitle}
+                            url={selectedReference.rateSourceUrl ?? selectedReference.sourceUrl}
+                            asOf={selectedReference.rateAsOf}
+                          />
                         </div>
                         <div className="mt-5">
                           <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Servicios e instalaciones</p>
@@ -1767,7 +2183,7 @@ export function HotelCaseWorkbench() {
                   variant="secondary"
                   onClick={() => {
                     setHotelCase(createDefaultHotelCase());
-                    setResult(null);
+                    clearCurrentResult();
                     setCurrentSavedCaseId(null);
                     setError(null);
                   }}
@@ -1890,7 +2306,7 @@ export function HotelCaseWorkbench() {
             />
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
               <Sparkles className="h-3.5 w-3.5" />
-              {result.research.mode === "gemini" ? "Investigacion" : "Fallback local"}
+              {result.research.mode === "gemini" ? "Investigacion actualizada" : "Referencia base"}
             </div>
             <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">
               {result.research.destinationDiagnosis}
@@ -1903,7 +2319,7 @@ export function HotelCaseWorkbench() {
           <div className="grid gap-6 xl:grid-cols-2">
             <Card>
               <SectionIntro
-                title="SEPTE sin tecnicismos"
+                title="SEPTE"
                 description="SEPTE sirve para ordenar lo que pasa alrededor del hotel: personas, economía, regulación, tecnología y entorno. Ahora cada factor se justifica con señales concretas y fuente visible."
               />
               <div className="grid gap-3">
@@ -2474,24 +2890,31 @@ export function HotelCaseWorkbench() {
                 description="No son errores: son focos de atención antes de tomar una decisión."
               />
               <div className="grid gap-3">
-                {result.summary.warnings.map((warning) => (
-                  <Highlight key={warning} title="Atencion" text={warning} tone="amber" />
-                ))}
+                {result.summary.warnings.length ? (
+                  result.summary.warnings.map((warning, index) => (
+                    <Highlight key={warning} title={`Alerta ${index + 1}`} text={warning} tone="amber" />
+                  ))
+                ) : (
+                  <Highlight
+                    title="Sin alertas criticas"
+                    text="El caso no presenta inconsistencias relevantes en inventario, mix de canales, ADR objetivo, comisiones o desayuno. Aun así, revisa las recomendaciones antes de decidir."
+                    tone="emerald"
+                  />
+                )}
               </div>
             </Card>
 
             <Card>
               <SectionIntro
-                title="Recomendaciones automaticas"
-                description="La app las genera a partir de los números y del mercado investigado."
+                title="Recomendaciones"
+                description="La app las genera a partir de los números y del mercado investigado. Cada recomendación incluye argumento, evidencia, mejora esperada y siguiente acción."
               />
-              <div className="grid gap-3">
-                {result.summary.recommendations.map((recommendation) => (
-                  <Highlight
+              <div className="grid gap-4">
+                {result.summary.recommendations.map((recommendation, index) => (
+                  <RecommendationDecisionCard
                     key={`${recommendation.title}-${recommendation.text}`}
-                    title={recommendation.title}
-                    text={recommendation.text}
-                    tone={recommendation.tone ?? "emerald"}
+                    recommendation={recommendation}
+                    index={index}
                   />
                 ))}
               </div>

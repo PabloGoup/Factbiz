@@ -44,7 +44,7 @@ function extractResponseText(response: unknown) {
 
 export async function getGroundedLocationContext(input: Pick<ProjectInput, "country" | "region" | "city" | "businessType" | "sector" | "targetAudience">): Promise<LocationContext> {
   if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY no está configurada.");
+    throw new Error("La credencial de IA no está configurada.");
   }
 
   const client = new GoogleGenAI({
@@ -67,7 +67,7 @@ export async function getGroundedLocationContext(input: Pick<ProjectInput, "coun
   const groundedBrief = extractResponseText(groundedResponse);
 
   if (!groundedBrief) {
-    throw new Error("Gemini no devolvió un brief grounded para la ubicación.");
+    throw new Error("El proveedor de IA no devolvió un brief grounded para la ubicación.");
   }
 
   const response = await client.models.generateContent({
@@ -108,7 +108,7 @@ export async function getGroundedLocationContext(input: Pick<ProjectInput, "coun
   const rawOutput = extractResponseText(response);
 
   if (!rawOutput) {
-    throw new Error("Gemini no devolvió contexto estructurado para la ubicación.");
+    throw new Error("El proveedor de IA no devolvió contexto estructurado para la ubicación.");
   }
 
   const parsed = groundedContextSchema.parse(parseGeminiJson(rawOutput));

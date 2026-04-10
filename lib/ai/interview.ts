@@ -785,7 +785,7 @@ export async function runInterviewTurn(messages: ChatMessage[], draft: ProjectDr
 
   const rawOutput = typeof response.text === "string" ? response.text.trim() : "";
   if (!rawOutput) {
-    throw new Error("Gemini no devolvió contenido para la entrevista.");
+    throw new Error("El proveedor de IA no devolvió contenido para la entrevista.");
   }
 
   const parsed = interviewTurnSchema.parse(parseGeminiJson(rawOutput));

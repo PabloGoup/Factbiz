@@ -111,11 +111,11 @@ export function ResultsDashboard() {
       setInsightMessage(
         payload.mode === "gemini"
           ? payload.warning
-            ? `Insights generados con ${payload.insights.model ?? "modelo configurado"}. Contexto territorial reforzado con fallback heurístico: ${payload.warning}`
-            : `Insights generados con ${payload.insights.model ?? "modelo configurado"}.`
+            ? `Insights generados con IA. Contexto territorial reforzado con fallback heurístico: ${payload.warning}`
+            : "Insights generados con IA."
           : payload.mode === "research-fallback"
             ? payload.insights.fallbackReason ??
-              `Insights construidos desde el dossier investigado por Gemini${payload.warning ? `. ${payload.warning}` : "."}`
+              `Insights construidos desde el dossier de investigación asistida${payload.warning ? `. ${payload.warning}` : "."}`
           : payload.insights.fallbackReason ?? "Se mantuvo la simulación local."
       );
     } catch (error) {
@@ -131,7 +131,7 @@ export function ResultsDashboard() {
 
     if (snapshot.insights.source === "gemini") {
       setInsightStatus("ready");
-      setInsightMessage(`Insights generados con ${snapshot.insights.model ?? "Gemini"}.`);
+      setInsightMessage("Insights generados con IA.");
       return;
     }
 
@@ -147,7 +147,7 @@ export function ResultsDashboard() {
     setInsightStatus(nextSnapshot.insights.source === "gemini" ? "ready" : "idle");
     setInsightMessage(
       nextSnapshot.insights.source === "gemini"
-        ? `Se cargó un informe ya enriquecido con ${nextSnapshot.insights.model ?? "Gemini"}.`
+        ? "Se cargó un informe ya enriquecido con IA."
         : "Se cargó un informe compatible en la aplicación."
     );
   };
