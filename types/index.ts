@@ -494,6 +494,7 @@ export type HotelCaseResult = {
 
 export type SavedHotelCaseRecord = {
   id: string;
+  userId: string | null;
   hotelName: string;
   destination: HotelDestinationId;
   region: string;

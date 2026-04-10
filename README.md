@@ -93,6 +93,7 @@ Si quieres usar biblioteca persistente de casos hoteleros con Supabase, agrega a
 ```bash
 SUPABASE_URL=tu_project_url
 SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+SUPABASE_PUBLISHABLE_KEY=tu_publishable_key
 ```
 
 ## Biblioteca de casos hoteleros con Supabase
@@ -100,9 +101,11 @@ SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
 El módulo `/casos-hoteleros` ya puede:
 
 - guardar un caso en base de datos con `Guardar caso`
+- actualizar un caso cargado con `Actualizar caso`
 - listar casos guardados
 - cargar un caso guardado de vuelta al formulario
 - comparar dos casos resueltos
+- separar la biblioteca por usuario autenticado con Supabase Auth
 
 La tabla esperada en Supabase está documentada en:
 
@@ -112,8 +115,9 @@ Pasos recomendados:
 
 1. Crea un proyecto en Supabase.
 2. Ejecuta el SQL de `data/hotel_cases_supabase.sql` en el editor SQL.
-3. Configura `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en `.env.local` y en Vercel.
-4. Reinicia `npm run dev`.
+3. Habilita Email/Password en `Authentication > Providers` de Supabase.
+4. Configura `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `SUPABASE_PUBLISHABLE_KEY` en `.env.local` y en Vercel.
+5. Reinicia `npm run dev`.
 
 ## Informe PDF
 

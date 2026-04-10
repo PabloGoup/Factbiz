@@ -2,6 +2,7 @@ create extension if not exists "pgcrypto";
 
 create table if not exists public.hotel_cases (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade,
   hotel_name text not null,
   destination text not null,
   region text not null,
@@ -14,9 +15,14 @@ create table if not exists public.hotel_cases (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+alter table public.hotel_cases
+add column if not exists user_id uuid references auth.users(id) on delete cascade;
+
 create index if not exists hotel_cases_destination_idx on public.hotel_cases(destination);
 create index if not exists hotel_cases_updated_at_idx on public.hotel_cases(updated_at desc);
 create index if not exists hotel_cases_hotel_name_idx on public.hotel_cases(hotel_name);
+create index if not exists hotel_cases_user_id_idx on public.hotel_cases(user_id);
+create index if not exists hotel_cases_user_destination_idx on public.hotel_cases(user_id, destination);
 
 create or replace function public.set_hotel_cases_updated_at()
 returns trigger

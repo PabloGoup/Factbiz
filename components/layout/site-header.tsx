@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, Building2, FileText, LayoutDashboard, PencilRuler } from "lucide-react";
 
+import { SessionMenu } from "@/components/auth/session-menu";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +57,10 @@ export function SiteHeader() {
           })}
         </nav>
 
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <SessionMenu />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

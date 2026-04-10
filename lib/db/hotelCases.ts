@@ -3,6 +3,7 @@ import type { HotelCaseInput, HotelCaseResult, SavedHotelCaseListItem, SavedHote
 
 type HotelCaseRow = {
   id: string;
+  user_id: string | null;
   hotel_name: string;
   destination: HotelCaseInput["destination"];
   region: string;
@@ -18,6 +19,7 @@ type HotelCaseRow = {
 function mapRowToRecord(row: HotelCaseRow): SavedHotelCaseRecord {
   return {
     id: row.id,
+    userId: row.user_id,
     hotelName: row.hotel_name,
     destination: row.destination,
     region: row.region,
@@ -48,12 +50,14 @@ function mapRowToListItem(row: HotelCaseRow): SavedHotelCaseListItem {
 }
 
 export async function saveHotelCaseRecord(payload: {
+  userId: string;
   input: HotelCaseInput;
   result?: HotelCaseResult | null;
 }) {
   const supabase = createSupabaseAdminClient();
 
   const insertPayload = {
+    user_id: payload.userId,
     hotel_name: payload.input.hotelName,
     destination: payload.input.destination,
     region: payload.input.region,
@@ -79,6 +83,7 @@ export async function saveHotelCaseRecord(payload: {
 
 export async function updateHotelCaseRecord(
   id: string,
+  userId: string,
   payload: {
     input: HotelCaseInput;
     result?: HotelCaseResult | null;
@@ -101,6 +106,7 @@ export async function updateHotelCaseRecord(
     .from("hotel_cases")
     .update(updatePayload)
     .eq("id", id)
+    .eq("user_id", userId)
     .select("*")
     .single<HotelCaseRow>();
 
@@ -111,7 +117,8 @@ export async function updateHotelCaseRecord(
   return mapRowToRecord(data);
 }
 
-export async function listHotelCaseRecords(filters?: {
+export async function listHotelCaseRecords(filters: {
+  userId: string;
   search?: string;
   destination?: HotelCaseInput["destination"] | "";
 }) {
@@ -119,6 +126,7 @@ export async function listHotelCaseRecords(filters?: {
   let query = supabase
     .from("hotel_cases")
     .select("*")
+    .eq("user_id", filters.userId)
     .order("updated_at", { ascending: false })
     .limit(50);
 
@@ -140,9 +148,14 @@ export async function listHotelCaseRecords(filters?: {
   return (data ?? []).map(mapRowToListItem);
 }
 
-export async function getHotelCaseRecordById(id: string) {
+export async function getHotelCaseRecordById(id: string, userId: string) {
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase.from("hotel_cases").select("*").eq("id", id).single<HotelCaseRow>();
+  const { data, error } = await supabase
+    .from("hotel_cases")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .single<HotelCaseRow>();
 
   if (error) {
     throw new Error(`No fue posible cargar el caso hotelero solicitado: ${error.message}`);
