@@ -148,12 +148,21 @@ function uniqueRecommendations(recommendations: HotelRecommendation[]) {
   return recommendations.reduce<HotelRecommendation[]>((collected, item) => {
     if (collected.some((current) => current.title === item.title || current.text === item.text)) return collected;
     collected.push(item);
-  return collected;
+    return collected;
   }, []);
 }
 
 function buildRecommendation(input: HotelRecommendation) {
-  return input;
+  return {
+    ...input,
+    solution: input.solution ?? input.nextAction,
+    assumption:
+      input.assumption ??
+      "La proyección requiere ejecución comercial disciplinada y seguimiento semanal sobre la palanca elegida.",
+    validationMetric:
+      input.validationMetric ??
+      "Revisar semanalmente ADR, ocupación, mix de canales y variación de revenue incremental."
+  };
 }
 
 function buildWarnings(input: HotelCaseInput, weightedAverageAdr: number, monthlyForecasts: HotelMonthlyForecast[]) {
@@ -247,6 +256,22 @@ function buildRecommendations(
     (sum, month) => sum + (month.roomTypeResults.find((item) => item.type === topRoomType?.type)?.revenue ?? 0),
     0
   );
+  const totalOccupiedRoomNights = monthlyForecasts.reduce((sum, month) => sum + month.occupiedRoomNights, 0);
+  const roomTypeAggregates = (["single", "double", "triple", "suite"] as const).map((type) => ({
+    type,
+    soldRoomNights: monthlyForecasts.reduce(
+      (sum, month) => sum + (month.roomTypeResults.find((item) => item.type === type)?.soldRoomNights ?? 0),
+      0
+    ),
+    revenue: monthlyForecasts.reduce(
+      (sum, month) => sum + (month.roomTypeResults.find((item) => item.type === type)?.revenue ?? 0),
+      0
+    ),
+    rate: input.roomRates[type]
+  }));
+  const rankedRoomTypes = [...roomTypeAggregates].sort((a, b) => b.revenue - a.revenue);
+  const primaryRoomType = rankedRoomTypes[0] ?? null;
+  const secondaryRoomType = rankedRoomTypes.find((item) => item.type !== primaryRoomType?.type) ?? null;
   const destinationExperiences = destination.attractions.slice(0, 2).join(" y ");
   const tourShare = input.channels.tourOperators.share;
   const directShare = input.channels.direct.share;
@@ -257,27 +282,55 @@ function buildRecommendations(
       : 0;
   const adrGap = roundCurrency(input.targetAverageRate - weightedAverageAdr);
   const adrSurplus = roundCurrency(weightedAverageAdr - input.targetAverageRate);
+  const premiumRoomRevenue = rankedRoomTypes.slice(0, 2).reduce((sum, item) => sum + item.revenue, 0);
+  const rateFenceUpliftRate = averageOccupancy >= 90 ? 0.02 : 0.015;
+  const rateFenceImpact = premiumRoomRevenue * rateFenceUpliftRate;
+  const channelShiftPoints = Math.min(4, Math.max(2, rebalancedShare || 2));
+  const channelShiftImpact =
+    totalOccupiedRoomNights > 0
+      ? totalOccupiedRoomNights * (channelShiftPoints / 100) * Math.max(bestNetAdr - lowestNetAdr, 0)
+      : 0;
+  const upsellConversion = averageOccupancy >= 90 ? 0.06 : 0.04;
+  const nextRoomGap =
+    primaryRoomType && secondaryRoomType
+      ? Math.max(secondaryRoomType.rate - primaryRoomType.rate, 0)
+      : 0;
+  const roomUpsellImpact =
+    primaryRoomType && nextRoomGap > 0
+      ? primaryRoomType.soldRoomNights * upsellConversion * nextRoomGap
+      : 0;
+  const breakfastConservativeAttach = 0.8;
+  const breakfastConservativeImpact = totalBreakfastDelta * breakfastConservativeAttach;
+  const packageAttachRate = averageOccupancy >= 90 ? 0.12 : 0.08;
+  const packageIncrementPerNight = averageOccupancy >= 90 ? 28 : 18;
+  const packageImpact = totalOccupiedRoomNights * packageAttachRate * packageIncrementPerNight;
 
   if (weightedAverageAdr < input.targetAverageRate) {
     recommendations.push(
       buildRecommendation({
-        title: "Defensa tarifaria",
-        text: `El ADR proyectado queda US$${roundCurrency(input.targetAverageRate - weightedAverageAdr)} bajo la meta. Conviene mover inventario premium desde ${CHANNEL_LABELS[lowestNetAdrChannel]} hacia ${CHANNEL_LABELS[mostProfitableChannel]} con pisos tarifarios, restricciones de descuento y upgrades controlados.`,
+        title: "Arquitectura ADR",
+        text: `El ADR proyectado queda US$${roundCurrency(input.targetAverageRate - weightedAverageAdr)} bajo la meta. La salida no es “más promoción”, sino rediseñar precio por tipología y canal: cerrar descuentos en ${CHANNEL_LABELS[lowestNetAdrChannel]}, aplicar pisos tarifarios en ${primaryRoomType ? ROOM_TYPE_LABELS[primaryRoomType.type] : "las categorías de mayor venta"} y reservar inventario premium para canales con mejor retorno.`,
         rationale: `La gerencia pide un ADR mayor a US$${roundCurrency(input.targetAverageRate)} y el caso llega a US$${roundCurrency(weightedAverageAdr)}. Si no se corrige, el hotel puede llenar habitaciones pero sostener una tarifa inferior a la meta.`,
-        evidence: `${CHANNEL_LABELS[lowestNetAdrChannel]} deja un net ADR aproximado de US$${roundCurrency(lowestNetAdr)}, mientras ${CHANNEL_LABELS[mostProfitableChannel]} llega a US$${roundCurrency(bestNetAdr)} después de comisiones.`,
-        expectedImpact: `Prioridad de corto plazo: cerrar una brecha tarifaria de US$${adrGap} por room night. A futuro, una mejora gradual de ADR protege el margen sin depender solo de subir ocupación.`,
-        nextAction: `Definir pisos tarifarios por canal y bloquear descuentos en dobles premium y suites para las fechas con ocupación esperada sobre 88%.`,
+        evidence: `${CHANNEL_LABELS[lowestNetAdrChannel]} deja un net ADR aproximado de US$${roundCurrency(lowestNetAdr)}, mientras ${CHANNEL_LABELS[mostProfitableChannel]} llega a US$${roundCurrency(bestNetAdr)}. Además, las dos tipologías con más ingreso concentran cerca de US$${roundCurrency(premiumRoomRevenue)} del revenue de habitaciones.`,
+        solution: `Aplicar una malla tarifaria con pisos por canal y cerrar inventario promocional en ${CHANNEL_LABELS[lowestNetAdrChannel]} cuando la ocupación proyectada del mes supere 88%. La subida debe concentrarse en ${primaryRoomType ? ROOM_TYPE_LABELS[primaryRoomType.type] : "la categoría principal"} y ${secondaryRoomType ? ROOM_TYPE_LABELS[secondaryRoomType.type] : "la categoría siguiente"}, no en todo el hotel.`,
+        assumption: `La proyección asume dos movimientos simultáneos: elevar en ${roundMetric(rateFenceUpliftRate * 100)}% el revenue de las tipologías líderes y migrar ${channelShiftPoints} puntos del mix hacia ${CHANNEL_LABELS[mostProfitableChannel]} sin perder room nights totales.`,
+        expectedImpact: `Con ese ajuste, el upside referencial sería de US$${roundCurrency(rateFenceImpact + channelShiftImpact)} entre enero y febrero: US$${roundCurrency(rateFenceImpact)} por arquitectura tarifaria y US$${roundCurrency(channelShiftImpact)} por mejorar el mix de canal.`,
+        validationMetric: `Validar semanalmente ADR de ${primaryRoomType ? ROOM_TYPE_LABELS[primaryRoomType.type] : "la categoría principal"}, mix por canal y pickup neto. Si cae el pickup más de 3% sin compensar ADR, la hipótesis no se está cumpliendo.`,
+        nextAction: `Definir esta semana pisos tarifarios por canal, blackout de descuentos en fechas pico y cupo limitado para inventario premium en ${CHANNEL_LABELS[lowestNetAdrChannel]}.`,
         tone: "amber"
       })
     );
   } else {
     recommendations.push(buildRecommendation({
-      title: "Captura de valor",
-      text: `El ADR proyectado supera la meta en US$${roundCurrency(weightedAverageAdr - input.targetAverageRate)}. La recomendación es sostener precio público y vender más valor agregado, evitando descuentos innecesarios en fechas de alta ocupación.`,
+      title: "Blindaje de ADR",
+      text: `El ADR proyectado supera la meta en US$${roundCurrency(weightedAverageAdr - input.targetAverageRate)}. La solución es blindarlo: no abrir descuento abierto y capturar valor vía precio por tipología, cierre de canales de menor retorno en picos y paquetes cerrados sin tocar la tarifa pública base.`,
       rationale: `El caso ya supera la meta de gerencia: ADR proyectado US$${roundCurrency(weightedAverageAdr)} versus meta US$${roundCurrency(input.targetAverageRate)}. Por eso el foco no debe ser bajar precio, sino vender valor adicional.`,
-      evidence: `La ocupación media enero-febrero es ${roundMetric(averageOccupancy)}%, con ingreso bruto de habitaciones de US$${roundCurrency(totalGrossRoomRevenue)}.`,
-      expectedImpact: `Si se captura solo 3% adicional sobre revenue de habitaciones mediante upgrades y paquetes, el upside referencial sería cercano a US$${roundCurrency(totalGrossRoomRevenue * 0.03)} en enero-febrero.`,
-      nextAction: `Crear paquetes con experiencia, late check-out y amenities premium sin tocar la tarifa pública base.`,
+      evidence: `La ocupación media enero-febrero es ${roundMetric(averageOccupancy)}%, el revenue de las dos tipologías líderes ronda US$${roundCurrency(premiumRoomRevenue)} y ${CHANNEL_LABELS[mostProfitableChannel]} deja el mejor net ADR.`,
+      solution: `Subir el precio efectivo donde ya existe disposición a pagar: cerrar descuentos en fechas de alta ocupación, aplicar upgrade pagado sobre ${primaryRoomType ? ROOM_TYPE_LABELS[primaryRoomType.type] : "la categoría principal"} y reservar el inventario premium para venta directa y paquetes cerrados ligados a ${destinationExperiences}.`,
+      assumption: `La proyección asume un uplift promedio de ${roundMetric(rateFenceUpliftRate * 100)}% sobre las tipologías líderes y un traspaso de ${channelShiftPoints} puntos del mix desde ${CHANNEL_LABELS[lowestNetAdrChannel]} a ${CHANNEL_LABELS[mostProfitableChannel]} sin caída material de ocupación.`,
+      expectedImpact: `Bajo ese supuesto, el upside referencial sería de US$${roundCurrency(rateFenceImpact + channelShiftImpact)} en enero-febrero, con mejora concentrada en ADR neto y no en mayor volumen.`,
+      validationMetric: `Seguir semanalmente ADR por tipología, share de canal premium, pickup en fechas pico y porcentaje de noches vendidas sin descuento. Si el ADR sube y la ocupación se sostiene sobre 88%, la hipótesis se está cumpliendo.`,
+      nextAction: `Activar desde la próxima semana una grilla de tarifas cerradas por fecha y canal, con paquetes no descontados y control diario de pickup en categorías altas.`,
       tone: "emerald"
     }));
   }
@@ -286,72 +339,113 @@ function buildRecommendations(
     recommendations.push(
       buildRecommendation({
         title: "Rebalanceo de canales",
-        text: `Hoy ${CHANNEL_LABELS.direct} tiene menor peso que ${CHANNEL_LABELS.tourOperators}. Vale la pena rediseñar la mezcla con beneficios exclusivos, early booking, upgrades y paquetes propios para bajar comisión sin perder volumen.`,
+        text: `Hoy ${CHANNEL_LABELS.direct} tiene menor peso que ${CHANNEL_LABELS.tourOperators}. La solución concreta es recuperar mix directo con una tarifa web con beneficio cerrado, remarketing a cotizaciones no convertidas y cupos limitados para intermediación en fechas de mayor presión.`,
         rationale: `La venta directa tiene ${directShare}% del mix y tour operadores tienen ${tourShare}%. Esa dependencia puede traer volumen, pero presiona margen por comisión y limita control comercial.`,
         evidence: `La comisión configurada para tour operadores es ${input.channels.tourOperators.commission}% versus ${input.channels.direct.commission}% en venta directa.`,
+        solution: `Lanzar una tarifa directa con un beneficio que no rompa paridad pública: desayuno premium, late check-out o experiencia menor incluida. En paralelo, cerrar parte del inventario de tour operadores en fechas con pickup fuerte y reenfocar campañas al canal propio.`,
+        assumption: `La proyección asume mover ${rebalancedShare} puntos del mix desde tour operadores hacia venta directa manteniendo el mismo volumen total de room nights.`,
         expectedImpact:
           commissionSavingsFromDirect > 0
             ? `Mover ${rebalancedShare} puntos de mix desde tour operadores a venta directa podría ahorrar cerca de US$${roundCurrency(commissionSavingsFromDirect)} en comisiones durante enero-febrero, manteniendo el mismo volumen total.`
             : `El impacto esperado es mejorar control de cliente y margen neto, aunque el ahorro exacto depende de cuánto volumen pueda migrarse sin perder ocupación.`,
+        validationMetric: `Control semanal de share directo, costo de comisión total, conversión web y pickup por fecha. Si el directo sube sin caída de room nights, la migración está funcionando.`,
         nextAction: `Lanzar tarifa web con beneficio exclusivo y meta mínima: subir venta directa de ${directShare}% a ${Math.min(directShare + 5, 100)}% antes de temporada alta.`,
         tone: "amber"
       })
     );
   }
 
-  recommendations.push(buildRecommendation({
-    title: "Producto estrella",
-    text: `La habitación con mayor tracción hoy es ${topRoomType ? ROOM_TYPE_LABELS[topRoomType.type] : "la tipología principal"}. Conviene construir una escalera de valor desde esa categoría hacia opciones superiores con amenities visibles, check-in preferente y beneficios que justifiquen mejor tarifa.`,
-    rationale: `La tipología con más revenue es una palanca natural para upselling porque ya concentra demanda y permite empujar categorías superiores sin rediseñar todo el hotel.`,
-    evidence: `${topRoomType ? ROOM_TYPE_LABELS[topRoomType.type] : "La tipología principal"} genera cerca de US$${roundCurrency(totalTopRoomTypeRevenue)} entre enero y febrero dentro del forecast.`,
-    expectedImpact: `Una mejora de 4% en ingreso de esa tipología, vía upgrades o bundles, equivaldría a unos US$${roundCurrency(totalTopRoomTypeRevenue * 0.04)} adicionales en la ventana analizada.`,
-    nextAction: `Diseñar tres niveles de upgrade: vista/ubicación, experiencia gastronómica y beneficio wellness o concierge.`,
-    tone: "slate"
-  }));
+  if (primaryRoomType) {
+    recommendations.push(buildRecommendation({
+      title: "Producto estrella",
+      text: `La categoría con más tracción hoy es ${ROOM_TYPE_LABELS[primaryRoomType.type]}. La recomendación no es promocionarla más, sino usarla como puerta de entrada a un upsell estructurado hacia una categoría superior o a bundles con margen.`,
+      rationale: `La tipología que concentra más revenue es la mejor palanca para elevar ADR porque ya tiene volumen probado. El trabajo no está en generar demanda nueva, sino en convertir parte de esa demanda existente en tickets más altos.`,
+      evidence: `${ROOM_TYPE_LABELS[primaryRoomType.type]} genera cerca de US$${roundCurrency(totalTopRoomTypeRevenue)} entre enero y febrero.${secondaryRoomType ? ` La siguiente categoría relevante es ${ROOM_TYPE_LABELS[secondaryRoomType.type]} con una brecha tarifaria de US$${roundCurrency(Math.max(secondaryRoomType.rate - primaryRoomType.rate, 0))}.` : ""}`,
+      solution: secondaryRoomType
+        ? `Diseñar una escalera de tres upgrades sobre ${ROOM_TYPE_LABELS[primaryRoomType.type]}: mejor vista o ubicación, bundle gastronómico y pase wellness/concierge, con precio anclado a la brecha hacia ${ROOM_TYPE_LABELS[secondaryRoomType.type]}.`
+        : `Diseñar bundles sobre ${ROOM_TYPE_LABELS[primaryRoomType.type]} con experiencia gastronómica, traslado o wellness para elevar ingreso medio sin cambiar inventario.`,
+      assumption: secondaryRoomType
+        ? `La proyección asume que ${roundMetric(upsellConversion * 100)}% de las room nights vendidas en ${ROOM_TYPE_LABELS[primaryRoomType.type]} migra a una categoría o bundle equivalente con captura de la brecha tarifaria.`
+        : `La proyección asume que ${roundMetric(upsellConversion * 100)}% de las room nights de la categoría líder compra un bundle adicional con margen incremental.`,
+      expectedImpact: secondaryRoomType
+        ? `Bajo ese supuesto, el ingreso incremental referencial sería de US$${roundCurrency(roomUpsellImpact)} en enero-febrero.`
+        : `El upside depende del bundle definido, pero la lógica es elevar el ingreso medio sobre la categoría de mayor volumen sin añadir costo fijo relevante.`,
+      validationMetric: `Revisar semanalmente take rate de upgrades, ADR de ${ROOM_TYPE_LABELS[primaryRoomType.type]} y porcentaje de reservas que migra a bundle superior. Si la conversión no llega al ${roundMetric(upsellConversion * 100)}%, la proyección no se cumple.`,
+      nextAction: `Publicar tres ofertas de upgrade en web, email pre-arrival y recepción, con script comercial y cupo semanal medido por categoría.`,
+      tone: "slate"
+    }));
+  }
 
   if (totalBreakfastDelta > 0) {
     recommendations.push(buildRecommendation({
       title: "Ingreso complementario",
-      text: `Subir desayuno desde US$${input.breakfastPriceCurrent} a US$${input.breakfastPriceProposed} abre un potencial adicional de US$${roundCurrency(totalBreakfastDelta)} entre enero y febrero. Lo más atractivo es venderlo como experiencia de marca con gastronomía local y no solo como recargo.`,
+      text: `Subir desayuno desde US$${input.breakfastPriceCurrent} a US$${input.breakfastPriceProposed} puede abrir un ingreso adicional relevante, pero solo si se empaqueta como producto y se protege la tasa de toma. La solución no es subir el precio solo en caja; debe venderse desde la reserva.`,
       rationale: `El cambio de precio no depende de vender más habitaciones; aprovecha huéspedes ya alojados. Por eso es una mejora de monetización directa sobre la demanda capturada.`,
       evidence: `Factor de ocupación: ${input.guestFactor} huéspedes por habitación. Precio actual: US$${input.breakfastPriceCurrent}; precio propuesto: US$${input.breakfastPriceProposed}.`,
-      expectedImpact: `El upside calculado es US$${roundCurrency(totalBreakfastDelta)} para enero-febrero si la toma de desayuno se mantiene en el supuesto del caso.`,
-      nextAction: `Convertir desayuno en paquete premium con producto local, horario extendido y preventa al reservar para reducir resistencia al precio.`,
+      solution: `Vender desayuno como paquete premium desde el motor de reservas, check-in y pre-arrival: gastronomía local, horario extendido, opción express y descuento solo por preventa.`,
+      assumption: `El full upside de US$${roundCurrency(totalBreakfastDelta)} solo se cumple si la toma de desayuno se mantiene al 100% del supuesto base. En un escenario más defendible de ${roundMetric(breakfastConservativeAttach * 100)}% de captura, el delta realizable sería de US$${roundCurrency(breakfastConservativeImpact)}.`,
+      expectedImpact: `Escenario conservador: US$${roundCurrency(breakfastConservativeImpact)} entre enero y febrero. Escenario pleno del supuesto base: US$${roundCurrency(totalBreakfastDelta)}.`,
+      validationMetric: `Medir semanalmente attach rate de desayuno, ingreso por huésped alojado y tasa de preventa al reservar. Si la captura cae bajo ${roundMetric(breakfastConservativeAttach * 100)}%, el forecast debe corregirse.`,
+      nextAction: `Configurar preventa de desayuno en web y recepción esta semana, con meta mínima de attach rate sobre ${roundMetric(breakfastConservativeAttach * 100)}%.`,
       tone: "emerald"
     }));
   }
 
   if (averageOccupancy >= 90) {
     recommendations.push(buildRecommendation({
-      title: "Experiencia premium",
-      text: `Con ocupación media de ${roundMetric(averageOccupancy)}%, el hotel tiene espacio para priorizar rentabilidad sobre volumen. Es un buen momento para lanzar paquetes firmados alrededor de ${destinationExperiences}, wellness y concierge premium.`,
+      title: "Paquete signature del destino",
+      text: `Con ocupación media de ${roundMetric(averageOccupancy)}%, la oportunidad no está en vender más noches sino en aumentar ingreso por noche ocupada. La palanca concreta es armar un paquete signature ligado a ${destinationExperiences}, wellness y concierge premium, con cupos limitados y sin descuento abierto.`,
       rationale: `Cuando la ocupación proyectada está tan alta, la restricción principal no es generar demanda sino capturar más valor por huésped y proteger capacidad.`,
       evidence: `Ocupación media enero-febrero: ${roundMetric(averageOccupancy)}%. Ingreso neto de habitaciones proyectado: US$${roundCurrency(totalNetRoomRevenue)}.`,
-      expectedImpact: `Un paquete premium con mejora conservadora de 2% sobre ingreso neto equivale a unos US$${roundCurrency(totalNetRoomRevenue * 0.02)} adicionales en enero-febrero.`,
-      nextAction: `Crear paquetes no descontados con cupos limitados y medir conversión semanal por canal.`,
+      solution: `Publicar un paquete cerrado para una fracción pequeña del inventario con experiencia del destino, amenity premium y servicio preferente. Debe estar disponible solo en venta directa y en uno o dos canales seleccionados.`,
+      assumption: `La proyección asume que ${roundMetric(packageAttachRate * 100)}% de las room nights ocupadas toma un paquete con margen incremental de US$${roundCurrency(packageIncrementPerNight)} por noche.`,
+      expectedImpact: `Bajo ese supuesto, el upside referencial sería de US$${roundCurrency(packageImpact)} entre enero y febrero, sin depender de más ocupación.`,
+      validationMetric: `Controlar semanalmente attach rate del paquete, margen incremental por reserva y share del paquete sobre nights ocupadas. Si el take rate no supera ${roundMetric(packageAttachRate * 100)}%, el upside no se materializa.`,
+      nextAction: `Diseñar un paquete signature con precio cerrado, cupo máximo por semana y tracking por canal desde el lanzamiento.`,
       tone: "emerald"
     }));
   } else {
     recommendations.push(buildRecommendation({
       title: "Fechas de hombro",
-      text: `Como la ocupación media proyectada es ${roundMetric(averageOccupancy)}%, conviene usar empresas, small groups y escapadas temáticas para reforzar noches de menor tensión sin deteriorar la tarifa pública.`,
+      text: `Como la ocupación media proyectada es ${roundMetric(averageOccupancy)}%, el crecimiento debe venir de noches de hombro y no de descuentos masivos. La solución concreta es usar empresas, small groups y escapadas temáticas con valor agregado y fechas cerradas.`,
       rationale: `Con ocupación bajo 90%, todavía hay espacio de demanda que puede llenarse sin necesariamente bajar la tarifa pública principal.`,
       evidence: `Ocupación media enero-febrero: ${roundMetric(averageOccupancy)}%. Canal empresas configurado con ${input.channels.corporate.share}% del mix.`,
-      expectedImpact: `Mejorar 2 puntos de ocupación en la ventana analizada agregaría aproximadamente ${roundMetric(input.totalRooms * 59 * 0.02)} room nights antes de comisiones.`,
-      nextAction: `Diseñar calendario de hombro con empresas, grupos pequeños y ofertas con valor agregado, no con descuento abierto.`,
+      solution: `Crear un calendario comercial por fecha de baja presión con paquetes corporate, reuniones pequeñas y escapadas de dos noches con servicios incluidos, sin abrir descuento público general.`,
+      assumption: `La proyección asume mejorar 2 puntos de ocupación en la ventana analizada a tarifa protegida, capturando demanda adicional en noches de menor tensión.`,
+      expectedImpact: `Ese movimiento agregaría aproximadamente ${roundMetric(input.totalRooms * 59 * 0.02)} room nights antes de comisiones, con mejor calidad de ingreso que una promoción abierta.`,
+      validationMetric: `Revisar pickup por fecha de hombro, ADR de corporate y porcentaje de ocupación incremental fuera de fines de semana o picos. Si la ocupación extra entra con ADR destruido, la mejora no sirve.`,
+      nextAction: `Armar un calendario de hombro con fechas, segmentos y paquete asignado antes del siguiente ciclo comercial.`,
       tone: "slate"
     }));
   }
 
-  recommendations.push(buildRecommendation({
-    title: "Canal más rentable",
-    text: `${CHANNEL_LABELS[mostProfitableChannel]} deja hoy el mejor retorno por habitación, mientras ${CHANNEL_LABELS[largestNetContributor]} aporta el mayor volumen neto. La estrategia comercial debería combinar ambos roles en vez de empujar todos los esfuerzos a un solo canal.`,
-    rationale: `Un canal puede ser el más rentable por ADR neto, pero otro puede aportar más caja total por volumen. La decisión comercial correcta debe separar margen y volumen.`,
-    evidence: `Canal con mejor ADR neto: ${CHANNEL_LABELS[mostProfitableChannel]}. Canal con mayor aporte neto total: ${CHANNEL_LABELS[largestNetContributor]}.`,
-    expectedImpact: `A futuro, separar roles permite usar el canal rentable para proteger tarifa y el canal de volumen para estabilizar ocupación, evitando depender de una sola fuente de demanda.`,
-    nextAction: `Asignar metas distintas por canal: margen para ${CHANNEL_LABELS[mostProfitableChannel]} y volumen controlado para ${CHANNEL_LABELS[largestNetContributor]}.`,
-    tone: "emerald"
-  }));
+  if (mostProfitableChannel !== largestNetContributor) {
+    recommendations.push(buildRecommendation({
+      title: "Gobernanza de canales",
+      text: `${CHANNEL_LABELS[mostProfitableChannel]} deja hoy el mejor retorno por habitación, mientras ${CHANNEL_LABELS[largestNetContributor]} aporta el mayor volumen neto. La solución es separar explícitamente el rol de cada canal en vez de pedirle lo mismo a todos.`,
+      rationale: `Un canal debe proteger ADR neto y otro puede estabilizar caja por volumen. Si se mezclan objetivos, el hotel termina erosionando tarifa donde debería defenderla.`,
+      evidence: `Canal con mejor ADR neto: ${CHANNEL_LABELS[mostProfitableChannel]}. Canal con mayor aporte neto total: ${CHANNEL_LABELS[largestNetContributor]}.`,
+      solution: `Asignar metas distintas: ${CHANNEL_LABELS[mostProfitableChannel]} para capturar margen y categorías altas; ${CHANNEL_LABELS[largestNetContributor]} para llenar demanda base con cupos y pisos tarifarios definidos.`,
+      assumption: `La mejora se materializa si el canal de volumen no toma inventario premium y si el canal rentable gana share en categorías de mayor ADR.`,
+      expectedImpact: `Separar funciones no crea ingresos por sí solo, pero evita canibalización entre canales y hace más probable sostener el ADR neto proyectado.`,
+      validationMetric: `Medir cada semana ADR neto por canal, share por tipo de habitación y margen después de comisión. Si un canal de volumen empieza a captar categorías premium sin piso tarifario, la estrategia falla.`,
+      nextAction: `Definir una matriz comercial por canal con objetivo, tipología prioritaria y tope de inventario para las próximas ocho semanas.`,
+      tone: "emerald"
+    }));
+  } else {
+    recommendations.push(buildRecommendation({
+      title: "Proteger canal líder",
+      text: `${CHANNEL_LABELS[mostProfitableChannel]} hoy lidera tanto en ADR neto como en aporte neto. La solución no es cargarle todo el crecimiento, sino protegerlo con beneficios exclusivos, control de sobreexposición y reglas claras para no degradar el precio.`,
+      rationale: `Cuando un mismo canal concentra margen y volumen, el riesgo principal es deteriorarlo por sobreuso, descuentos excesivos o dependencia excesiva de una sola fuente de demanda.`,
+      evidence: `${CHANNEL_LABELS[mostProfitableChannel]} concentra el mejor retorno por habitación y el mayor aporte neto total en el caso actual.`,
+      solution: `Mantener ese canal como eje de captura, pero con beneficios cerrados, paridad pública controlada y respaldo de canales secundarios para no depender de una sola fuente.`,
+      assumption: `La recomendación se cumple si ese canal mantiene su share sin aumentar su costo comercial ni obligar descuentos para sostener conversión.`,
+      expectedImpact: `El beneficio esperado es proteger el ADR neto ya capturado y reducir el riesgo de concentración comercial más que abrir un upside inmediato adicional.`,
+      validationMetric: `Monitorear semanalmente share del canal líder, ADR neto, tasa de conversión y dependencia sobre el total de net revenue. Si supera el umbral interno de concentración, conviene diversificar.`,
+      nextAction: `Definir un umbral máximo de dependencia por canal y un plan de respaldo con dos canales secundarios antes de abrir más inventario al canal líder.`,
+      tone: "emerald"
+    }));
+  }
 
   return uniqueRecommendations(recommendations).slice(0, 6);
 }

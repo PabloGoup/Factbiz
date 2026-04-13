@@ -490,7 +490,10 @@ export type HotelRecommendation = {
   text: string;
   rationale: string;
   evidence: string;
+  solution: string;
+  assumption: string;
   expectedImpact: string;
+  validationMetric: string;
   nextAction: string;
   tone?: "emerald" | "amber" | "slate";
 };

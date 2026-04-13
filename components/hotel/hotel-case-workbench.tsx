@@ -265,6 +265,14 @@ function RecommendationDecisionCard({ recommendation, index }: { recommendation:
         </div>
         <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+            Solución realizable
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {recommendation.solution ?? recommendation.nextAction}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
             Proyección o mejora posible
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
@@ -272,6 +280,22 @@ function RecommendationDecisionCard({ recommendation, index }: { recommendation:
           </p>
         </div>
         <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+            Condición de cumplimiento
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {recommendation.assumption ?? "La proyección solo se cumple si la palanca se ejecuta sin deteriorar ocupación ni tarifa pública."}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+            Validación semanal
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            {recommendation.validationMetric ?? "Definir indicador, responsable y frecuencia de revisión antes de ejecutar."}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70 md:col-span-2">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
             Próximo paso
           </p>
@@ -2320,14 +2344,14 @@ export function HotelCaseWorkbench() {
             <Card>
               <SectionIntro
                 title="SEPTE"
-                description="SEPTE sirve para ordenar lo que pasa alrededor del hotel: personas, economía, regulación, tecnología y entorno. Ahora cada factor se justifica con señales concretas y fuente visible."
+                description="Cada factor SEPTE cruza señal de mercado, lectura estratégica e implicancia competitiva para el caso. El foco está en argumentar cómo los datos endurecen o favorecen la tesis del hotel."
               />
               <div className="grid gap-3">
                 {result.research.septeFactors.map((factor, index) => (
                   <HelperDetails key={factor.id} title={`${index + 1}. ${factor.label}`} defaultOpen={index === 0}>
-                    <p>{factor.analysis}</p>
-                    <p className="mt-3">
-                      <span className="font-semibold text-slate-950 dark:text-slate-50">¿Qué significa para el hotel?</span>{" "}
+                    <p className="text-sm leading-7 text-slate-700 dark:text-slate-300">{factor.analysis}</p>
+                    <p className="mt-3 text-sm leading-7 text-slate-700 dark:text-slate-300">
+                      <span className="font-semibold text-slate-950 dark:text-slate-50">Implicancia competitiva:</span>{" "}
                       {factor.implication}
                     </p>
                     {factor.evidence.length ? (
@@ -2340,7 +2364,7 @@ export function HotelCaseWorkbench() {
                             <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">
                               {evidence.label}: {evidence.value}
                             </p>
-                            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{evidence.note}</p>
+                            <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-300">{evidence.note}</p>
                             <SourceBadge title={evidence.sourceTitle} url={evidence.sourceUrl} asOf={evidence.asOf} />
                           </div>
                         ))}

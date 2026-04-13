@@ -640,8 +640,10 @@ Limites:
 Devuelve solo la clave septeFactors.
 Reglas:
 - exactamente 6 factores
-- analysis e implication breves y concretos
+- analysis debe ser una lectura estrategica, no una definicion del factor
+- implication debe traducir la lectura a consecuencia comercial, tarifaria, operativa o competitiva para el hotel
 - cada factor debe incluir exactamente 1 evidencia con metrica exacta, fecha o periodo cuando exista y fuente visible
+- evidence.note no debe explicar "para que sirve" la metrica; debe argumentar que tension, oportunidad, limite o ventaja revela para este caso
 - aplicado al hotel, no genérico`,
       schema: septeResponseSchema,
       validator: septeSectionSchema,
@@ -844,7 +846,8 @@ ${memoForStructuring}
 
 Instrucciones:
 - destinationDiagnosis: 2 o 3 frases, maximo 420 caracteres.
-- septeFactors: exactamente 6 factores. analysis e implication deben ser breves y concretos. Cada factor debe incluir exactamente 1 evidencia con label, value, note, asOf, sourceTitle y sourceUrl.
+- septeFactors: exactamente 6 factores. analysis debe plantear una tesis estrategica apoyada en el contexto; implication debe bajar esa tesis a consecuencia competitiva para el hotel. Cada factor debe incluir exactamente 1 evidencia con label, value, note, asOf, sourceTitle y sourceUrl.
+- en septeFactors.evidence.note evita frases didacticas como "sirve para medir" o "muestra que". Debe decir que implica ese dato sobre demanda, ADR, estacionalidad, margen, capacidad de captura, riesgo operativo o barrera de entrada.
 - competitionSummary: 2 o 3 frases, maximo 380 caracteres.
 - attractions: 4 a 6 items reales con name, relevance, sourceTitle y sourceUrl. Prioriza fuentes oficiales del destino.
 - touristStats: 3 o 4 metricas reales con label, value, note, asOf, sourceTitle y sourceUrl. Deben incluir, cuando exista en el contexto, llegadas de turistas a Chile y volumen o desempeño turistico regional con pernoctaciones, ocupacion o ADR. Prioriza INE, Subsecretaria de Turismo, SERNATUR u organismos oficiales.

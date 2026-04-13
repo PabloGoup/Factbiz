@@ -155,7 +155,7 @@ function buildOfficialTouristStats(destinationId: HotelDestinationId): HotelTour
     {
       label: "Ocupación regional",
       value: `${context.occupancy} en ${context.asOf}`,
-      note: "Sirve para medir qué tan tensionado o disponible está el mercado regional en habitaciones.",
+      note: "Ese nivel de ocupación define cuánto margen tiene un nuevo hotel para capturar demanda sin entrar de inmediato en una guerra tarifaria.",
       asOf: context.asOf,
       sourceTitle: context.regionSource.title,
       sourceUrl: context.regionSource.url
@@ -163,7 +163,7 @@ function buildOfficialTouristStats(destinationId: HotelDestinationId): HotelTour
     {
       label: "ADR regional",
       value: `${context.adr} en ${context.asOf}`,
-      note: "Es la referencia oficial más útil para explicar el rango tarifario del destino a nivel regional.",
+      note: "Ese ADR marca el piso de referencia del destino y ayuda a evaluar si la tarifa objetivo del caso está alineada, agresiva o insuficiente.",
       asOf: context.asOf,
       sourceTitle: context.regionSource.title,
       sourceUrl: context.regionSource.url
@@ -179,7 +179,7 @@ function buildOfficialSepteEvidence(destinationId: HotelDestinationId): Partial<
       {
         label: "Turismo receptivo nacional",
         value: "6.004.567 llegadas en 2025",
-        note: "La magnitud de turistas extranjeros que entran al país confirma una base real de demanda para destinos premium y de naturaleza.",
+        note: "Ese volumen respalda una base de demanda internacional suficiente para sostener destinos premium, pero obliga a competir por visibilidad y conversión, no solo por ubicación.",
         asOf: "Año 2025",
         sourceTitle: CHILE_RECEPTIVE_TOURISM_SOURCE.title,
         sourceUrl: CHILE_RECEPTIVE_TOURISM_SOURCE.url
@@ -187,7 +187,7 @@ function buildOfficialSepteEvidence(destinationId: HotelDestinationId): Partial<
       {
         label: "Pernoctaciones regionales",
         value: `${context.pernoctations} en ${context.asOf}`,
-        note: "Mide la presión turística real sobre la región y ayuda a justificar el tamaño del flujo que podría capturar un hotel.",
+        note: "Ese volumen confirma escala real de demanda en la región y permite defender que el caso compite por capturar una fracción del flujo existente, no por crear demanda desde cero.",
         asOf: context.asOf,
         sourceTitle: context.regionSource.title,
         sourceUrl: context.regionSource.url
@@ -197,7 +197,7 @@ function buildOfficialSepteEvidence(destinationId: HotelDestinationId): Partial<
       {
         label: "ADR regional",
         value: `${context.adr} en ${context.asOf}`,
-        note: "Entrega una referencia dura del precio promedio diario que ya sostiene el mercado regional.",
+        note: "Ese ADR muestra el rango de precio ya validado por el mercado y funciona como referencia para defender o cuestionar la meta tarifaria del proyecto.",
         asOf: context.asOf,
         sourceTitle: context.regionSource.title,
         sourceUrl: context.regionSource.url
@@ -205,7 +205,7 @@ function buildOfficialSepteEvidence(destinationId: HotelDestinationId): Partial<
       {
         label: "Ocupación regional",
         value: `${context.occupancy} en ${context.asOf}`,
-        note: "Ayuda a estimar si el destino tiene un mercado tensionado o todavía con espacio para capturar demanda.",
+        note: "Esa ocupación indica si el destino ya opera tensionado o si todavía hay holgura; cambia por completo la estrategia de entrada, mezcla de canales y ritmo de captura.",
         asOf: context.asOf,
         sourceTitle: context.regionSource.title,
         sourceUrl: context.regionSource.url
@@ -215,7 +215,7 @@ function buildOfficialSepteEvidence(destinationId: HotelDestinationId): Partial<
       {
         label: "Crecimiento del turismo receptivo",
         value: "+14,6% en 2025 vs 2024",
-        note: "Muestra un entorno país con foco en conectividad y promoción turística, relevante para destinos que dependen del flujo internacional.",
+        note: "Ese crecimiento mejora la tesis de demanda para destinos expuestos a flujo internacional y reduce el riesgo de depender solo del mercado doméstico.",
         asOf: "Año 2025",
         sourceTitle: CHILE_RECEPTIVE_TOURISM_SOURCE.title,
         sourceUrl: CHILE_RECEPTIVE_TOURISM_SOURCE.url
@@ -225,7 +225,7 @@ function buildOfficialSepteEvidence(destinationId: HotelDestinationId): Partial<
       {
         label: "Escala de la demanda turística",
         value: "6.004.567 llegadas internacionales en 2025",
-        note: "Ese volumen de demanda refuerza la necesidad de conversión digital, motor de reservas y visibilidad online para capturar parte del flujo.",
+        note: "Con esa escala de demanda, la captura no depende de presencia física sino de distribución digital, reputación y capacidad de conversión directa.",
         asOf: "Año 2025",
         sourceTitle: CHILE_RECEPTIVE_TOURISM_SOURCE.title,
         sourceUrl: CHILE_RECEPTIVE_TOURISM_SOURCE.url
@@ -235,7 +235,7 @@ function buildOfficialSepteEvidence(destinationId: HotelDestinationId): Partial<
       {
         label: "Volumen turístico regional",
         value: `${context.pernoctations} pernoctaciones en ${context.asOf}`,
-        note: "Ese volumen cuantifica la presión que recibe el territorio y ayuda a justificar políticas de agua, energía y capacidad de carga.",
+        note: "Ese flujo aumenta la presión sobre agua, energía y capacidad de carga, por lo que sostenibilidad deja de ser discurso y pasa a ser condición operativa y reputacional.",
         asOf: context.asOf,
         sourceTitle: context.regionSource.title,
         sourceUrl: context.regionSource.url
@@ -245,7 +245,7 @@ function buildOfficialSepteEvidence(destinationId: HotelDestinationId): Partial<
       {
         label: "Actividad regional de alojamiento",
         value: `${context.pernoctations} pernoctaciones en ${context.asOf}`,
-        note: "Un volumen alto de pernoctaciones exige cumplimiento riguroso en habilitación, seguridad, alimentos, contratos y operación turística formal.",
+        note: "Ese nivel de actividad vuelve más exigente el estándar de cumplimiento, fiscalización y formalidad operativa para un hotel que quiera competir en segmento alto.",
         asOf: context.asOf,
         sourceTitle: context.regionSource.title,
         sourceUrl: context.regionSource.url
