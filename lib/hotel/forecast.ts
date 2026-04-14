@@ -1,4 +1,4 @@
-import { HOTEL_DESTINATION_PROFILES, normalizeHotelCaseInput } from "@/lib/hotel/data";
+import { HOTEL_DESTINATION_PROFILES, buildChannelRoomAllocation, normalizeHotelCaseInput } from "@/lib/hotel/data";
 import type {
   HotelCaseInput,
   HotelCaseResult,
@@ -540,6 +540,12 @@ export function validateHotelCaseInput(input: HotelCaseInput) {
     normalizedInput.channels.onlineAgencies.share +
     normalizedInput.channels.direct.share +
     normalizedInput.channels.corporate.share;
+  const expectedAllocation = buildChannelRoomAllocation(normalizedInput.roomMix, {
+    tourOperators: normalizedInput.channels.tourOperators.share,
+    onlineAgencies: normalizedInput.channels.onlineAgencies.share,
+    direct: normalizedInput.channels.direct.share,
+    corporate: normalizedInput.channels.corporate.share
+  });
 
   if (channelShare !== 100) issues.push("La distribucion de canales debe sumar 100%.");
 
@@ -551,6 +557,20 @@ export function validateHotelCaseInput(input: HotelCaseInput) {
 
     if (allocationTotal !== normalizedInput.roomMix[type]) {
       issues.push(`La asignacion por canal de ${ROOM_TYPE_LABELS[type]} debe coincidir con el inventario total de esa tipologia.`);
+    }
+  }
+
+  for (const channel of CHANNEL_ORDER) {
+    const assignedTotal = ROOM_TYPE_ORDER.reduce(
+      (sum, type) => sum + normalizedInput.channels[channel].roomAllocation[type],
+      0
+    );
+    const expectedTotal = ROOM_TYPE_ORDER.reduce((sum, type) => sum + expectedAllocation[channel][type], 0);
+
+    if (assignedTotal !== expectedTotal) {
+      issues.push(
+        `${CHANNEL_LABELS[channel]} tiene ${assignedTotal} habitaciones asignadas, pero por su participación debería trabajar con ${expectedTotal}. Ajusta la grilla de cupos o la participación del canal.`
+      );
     }
   }
 

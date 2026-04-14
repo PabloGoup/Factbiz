@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  buildChannelRoomAllocation,
   createDefaultHotelCase,
   DEFAULT_HOTEL_CHANNELS,
   HOTEL_CHANNEL_LABELS,
@@ -962,16 +963,51 @@ export function HotelCaseWorkbench() {
 
   const updateChannelField = (channel: HotelSalesChannelId, field: "share" | "commission", value: number) => {
     clearCurrentResult();
-    setHotelCase((current) => ({
-      ...current,
-      channels: {
+    setHotelCase((current) => {
+      const nextChannels = {
         ...current.channels,
         [channel]: {
           ...current.channels[channel],
           [field]: value
         }
+      };
+
+      if (field === "share") {
+        const nextAllocation = buildChannelRoomAllocation(current.roomMix, {
+          tourOperators: nextChannels.tourOperators.share,
+          onlineAgencies: nextChannels.onlineAgencies.share,
+          direct: nextChannels.direct.share,
+          corporate: nextChannels.corporate.share
+        });
+
+        return {
+          ...current,
+          channels: {
+            tourOperators: {
+              ...nextChannels.tourOperators,
+              roomAllocation: { ...nextAllocation.tourOperators }
+            },
+            onlineAgencies: {
+              ...nextChannels.onlineAgencies,
+              roomAllocation: { ...nextAllocation.onlineAgencies }
+            },
+            direct: {
+              ...nextChannels.direct,
+              roomAllocation: { ...nextAllocation.direct }
+            },
+            corporate: {
+              ...nextChannels.corporate,
+              roomAllocation: { ...nextAllocation.corporate }
+            }
+          }
+        };
       }
-    }));
+
+      return {
+        ...current,
+        channels: nextChannels
+      };
+    });
   };
 
   const updateChannelRate = (channel: HotelSalesChannelId, type: (typeof ROOM_TYPE_ORDER)[number], value: number) => {
@@ -1093,6 +1129,24 @@ export function HotelCaseWorkbench() {
     }),
     {} as Record<(typeof ROOM_TYPE_ORDER)[number], number>
   );
+  const expectedChannelAllocation = buildChannelRoomAllocation(hotelCase.roomMix, {
+    tourOperators: hotelCase.channels.tourOperators.share,
+    onlineAgencies: hotelCase.channels.onlineAgencies.share,
+    direct: hotelCase.channels.direct.share,
+    corporate: hotelCase.channels.corporate.share
+  });
+  const channelAllocationStatus = CHANNEL_ORDER.map((channel) => {
+    const assigned = ROOM_TYPE_ORDER.reduce((sum, type) => sum + hotelCase.channels[channel].roomAllocation[type], 0);
+    const expected = ROOM_TYPE_ORDER.reduce((sum, type) => sum + expectedChannelAllocation[channel][type], 0);
+
+    return {
+      channel,
+      assigned,
+      expected,
+      isAligned: assigned === expected
+    };
+  });
+  const allocationMatchesShare = channelAllocationStatus.every((item) => item.isAligned);
 
   const countryOptions = sortOptions(HOTEL_REFERENCE_CATALOG.map((reference) => reference.country));
   const regionOptions = sortOptions(
@@ -2288,7 +2342,17 @@ export function HotelCaseWorkbench() {
                   value={`${roomAllocationTotals.double} / ${hotelCase.roomMix.double}`}
                   helper="Control rápido del cupo asignado para la tipología Doble."
                 />
+                <SummaryMetric
+                  label="Cupo vs participación"
+                  value={allocationMatchesShare ? "Cuadra" : "No cuadra"}
+                  helper="Cada canal debería tener un total de habitaciones alineado con su porcentaje de participación."
+                />
               </div>
+              {!allocationMatchesShare ? (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  La asignación manual de habitaciones ya no coincide con la participación de canales. Si defines 20% para un canal, su cupo total debería acercarse al objetivo calculado para ese porcentaje.
+                </div>
+              ) : null}
               <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                 <div className="mb-3">
                   <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Grilla de tarifario por canal</p>
@@ -2333,7 +2397,7 @@ export function HotelCaseWorkbench() {
                 <div className="mb-3">
                   <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Grilla de asignación de habitaciones por canal</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Aquí asignas el inventario operativo por canal. La suma de cada columna debe coincidir con el inventario total por tipología.
+                    Aquí asignas el inventario operativo por canal. Cada celda muestra el número de habitaciones y abajo el porcentaje que representa dentro de esa tipología.
                   </p>
                 </div>
                 <table className="min-w-full text-left text-sm">
@@ -2346,6 +2410,7 @@ export function HotelCaseWorkbench() {
                         </th>
                       ))}
                       <th className="pb-3">Total asignado</th>
+                      <th className="pb-3">Objetivo</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2354,17 +2419,49 @@ export function HotelCaseWorkbench() {
                         <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{HOTEL_CHANNEL_LABELS[channel]}</td>
                         {ROOM_TYPE_ORDER.map((type) => (
                           <td key={type} className="py-3 pr-3">
-                            <Input
-                              type="number"
-                              value={hotelCase.channels[channel].roomAllocation[type]}
-                              onChange={(event) => updateChannelAllocation(channel, type, Number(event.target.value))}
-                            />
+                            <div className="space-y-2">
+                              <Input
+                                type="number"
+                                value={hotelCase.channels[channel].roomAllocation[type]}
+                                onChange={(event) => updateChannelAllocation(channel, type, Number(event.target.value))}
+                              />
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                {formatPercent(
+                                  hotelCase.roomMix[type] > 0
+                                    ? (hotelCase.channels[channel].roomAllocation[type] / hotelCase.roomMix[type]) * 100
+                                    : 0
+                                )}{" "}
+                                de {ROOM_TYPE_LABELS[type]}
+                              </p>
+                            </div>
                           </td>
                         ))}
                         <td className="py-3 text-slate-600 dark:text-slate-300">
-                          {formatCompactNumber(
-                            ROOM_TYPE_ORDER.reduce((sum, type) => sum + hotelCase.channels[channel].roomAllocation[type], 0)
-                          )}
+                          <div className="space-y-1">
+                            <div>
+                              {formatCompactNumber(
+                                ROOM_TYPE_ORDER.reduce((sum, type) => sum + hotelCase.channels[channel].roomAllocation[type], 0)
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              {formatPercent(
+                                hotelCase.totalRooms > 0
+                                  ? (ROOM_TYPE_ORDER.reduce((sum, type) => sum + hotelCase.channels[channel].roomAllocation[type], 0) /
+                                      hotelCase.totalRooms) *
+                                      100
+                                  : 0
+                              )}{" "}
+                              del hotel
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 text-slate-600 dark:text-slate-300">
+                          <div className="space-y-1">
+                            <div>{formatCompactNumber(channelAllocationStatus.find((item) => item.channel === channel)?.expected ?? 0)}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              {formatPercent(hotelCase.channels[channel].share)} esperado
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -2372,10 +2469,20 @@ export function HotelCaseWorkbench() {
                       <td className="py-3">Control total</td>
                       {ROOM_TYPE_ORDER.map((type) => (
                         <td key={type} className="py-3">
-                          {formatCompactNumber(roomAllocationTotals[type])} / {formatCompactNumber(hotelCase.roomMix[type])}
+                          <div>{formatCompactNumber(roomAllocationTotals[type])} / {formatCompactNumber(hotelCase.roomMix[type])}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {formatPercent(
+                              hotelCase.roomMix[type] > 0 ? (roomAllocationTotals[type] / hotelCase.roomMix[type]) * 100 : 0
+                            )}
+                          </div>
                         </td>
                       ))}
-                      <td className="py-3">{formatCompactNumber(totalRoomMix)} / {formatCompactNumber(hotelCase.totalRooms)}</td>
+                      <td className="py-3">
+                        <div>{formatCompactNumber(totalRoomMix)} / {formatCompactNumber(hotelCase.totalRooms)}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          {formatPercent(hotelCase.totalRooms > 0 ? (totalRoomMix / hotelCase.totalRooms) * 100 : 0)}
+                        </div>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -2394,6 +2501,7 @@ export function HotelCaseWorkbench() {
                       <th className="pb-3">Participación</th>
                       <th className="pb-3">Comisión</th>
                       <th className="pb-3">Habitaciones asignadas</th>
+                      <th className="pb-3">Objetivo por mix</th>
                       <th className="pb-3">Lectura</th>
                     </tr>
                   </thead>
@@ -2407,6 +2515,9 @@ export function HotelCaseWorkbench() {
                           {formatCompactNumber(
                             ROOM_TYPE_ORDER.reduce((sum, type) => sum + hotelCase.channels[channel].roomAllocation[type], 0)
                           )}
+                        </td>
+                        <td className="py-3 text-slate-600 dark:text-slate-300">
+                          {formatCompactNumber(channelAllocationStatus.find((item) => item.channel === channel)?.expected ?? 0)}
                         </td>
                         <td className="py-3 text-slate-600 dark:text-slate-300">
                           {channel === "direct"
@@ -2425,7 +2536,7 @@ export function HotelCaseWorkbench() {
             </Card>
 
               <div className="flex flex-wrap gap-3">
-                <Button onClick={() => void solveHotelCase()} disabled={loading}>
+                <Button onClick={() => void solveHotelCase()} disabled={loading || !allocationMatchesShare}>
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                   Resolver caso hotelero
                 </Button>
@@ -2444,6 +2555,11 @@ export function HotelCaseWorkbench() {
               </div>
 
               {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+              {!allocationMatchesShare ? (
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  No puedes resolver el caso hasta que el total asignado por cada canal cuadre con su porcentaje de participación.
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-6 xl:sticky xl:top-24 self-start">

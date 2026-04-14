@@ -57,7 +57,7 @@ export const DEFAULT_HOTEL_CHANNELS = {
 const HOTEL_CHANNEL_ORDER: HotelSalesChannelId[] = ["tourOperators", "onlineAgencies", "direct", "corporate"];
 const HOTEL_ROOM_TYPE_ORDER = ["single", "double", "triple", "suite"] as const;
 
-function buildChannelRoomAllocation(
+export function buildChannelRoomAllocation(
   roomMix: HotelCaseInput["roomMix"],
   channelShares: Record<HotelSalesChannelId, number>
 ): Record<HotelSalesChannelId, HotelCaseInput["roomMix"]> {
