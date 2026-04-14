@@ -1,8 +1,9 @@
-import { HOTEL_DESTINATION_PROFILES } from "@/lib/hotel/data";
+import { HOTEL_DESTINATION_PROFILES, normalizeHotelCaseInput } from "@/lib/hotel/data";
 import type {
   HotelCaseInput,
   HotelCaseResult,
   HotelChannelResult,
+  HotelChannelRoomTypeResult,
   HotelMonthlyForecast,
   HotelRecommendation,
   HotelRoomMix,
@@ -20,6 +21,9 @@ function roundMetric(value: number) {
 function sumRoomMix(roomMix: HotelRoomMix) {
   return roomMix.single + roomMix.double + roomMix.triple + roomMix.suite;
 }
+
+const ROOM_TYPE_ORDER = ["single", "double", "triple", "suite"] as const;
+const CHANNEL_ORDER: HotelSalesChannelId[] = ["tourOperators", "onlineAgencies", "direct", "corporate"];
 
 function roomShareMap(input: HotelCaseInput) {
   const total = Math.max(input.totalRooms, 1);
@@ -41,41 +45,83 @@ function buildMonthlyForecast(
   const availableRoomNights = input.totalRooms * days;
   const occupiedRoomNights = availableRoomNights * (occupancyRate / 100);
   const shares = roomShareMap(input);
-  const roomTypeResults = (["single", "double", "triple", "suite"] as const).map((type) => {
-    const soldRoomNights = occupiedRoomNights * shares[type];
-    const rate = input.roomRates[type];
-    const revenue = soldRoomNights * rate;
+  const soldRoomNightsByType = ROOM_TYPE_ORDER.reduce<Record<(typeof ROOM_TYPE_ORDER)[number], number>>(
+    (current, type) => ({
+      ...current,
+      [type]: occupiedRoomNights * shares[type]
+    }),
+    {} as Record<(typeof ROOM_TYPE_ORDER)[number], number>
+  );
+  const channelRoomTypeResults: HotelChannelRoomTypeResult[] = [];
+
+  for (const channel of CHANNEL_ORDER) {
+    const config = input.channels[channel];
+
+    for (const type of ROOM_TYPE_ORDER) {
+      const occupiedChannelRoomNights = soldRoomNightsByType[type] * (config.share / 100);
+      const availableChannelRoomNights = config.roomAllocation[type] * days;
+      const grossRevenue = occupiedChannelRoomNights * config.rates[type];
+      const commissionCost = grossRevenue * (config.commission / 100);
+      const netRevenue = grossRevenue - commissionCost;
+
+      channelRoomTypeResults.push({
+        channel,
+        type,
+        assignedRooms: config.roomAllocation[type],
+        availableRoomNights: roundMetric(availableChannelRoomNights),
+        occupiedRoomNights: roundMetric(occupiedChannelRoomNights),
+        occupancyRate: roundMetric(
+          availableChannelRoomNights > 0 ? (occupiedChannelRoomNights / availableChannelRoomNights) * 100 : 0
+        ),
+        rate: roundCurrency(config.rates[type]),
+        grossRevenue: roundCurrency(grossRevenue),
+        commissionCost: roundCurrency(commissionCost),
+        netRevenue: roundCurrency(netRevenue)
+      });
+    }
+  }
+
+  const roomTypeResults = ROOM_TYPE_ORDER.map((type) => {
+    const soldRoomNights = soldRoomNightsByType[type];
+    const revenue = channelRoomTypeResults
+      .filter((item) => item.type === type)
+      .reduce((sum, item) => sum + item.grossRevenue, 0);
 
     return {
       type,
       availableRooms: input.roomMix[type],
       soldRoomNights: roundMetric(soldRoomNights),
-      rate: roundCurrency(rate),
+      rate: roundCurrency(input.roomRates[type]),
       revenue: roundCurrency(revenue)
     };
   });
 
-  const grossRoomRevenue = roomTypeResults.reduce((sum, item) => sum + item.revenue, 0);
+  const grossRoomRevenue = channelRoomTypeResults.reduce((sum, item) => sum + item.grossRevenue, 0);
   const totalGuests = occupiedRoomNights * input.guestFactor;
   const achievedAdr = occupiedRoomNights > 0 ? grossRoomRevenue / occupiedRoomNights : 0;
   const breakfastRevenueCurrent = totalGuests * input.breakfastPriceCurrent;
   const breakfastRevenueProposed = totalGuests * input.breakfastPriceProposed;
   const breakfastRevenueDelta = breakfastRevenueProposed - breakfastRevenueCurrent;
 
-  const channelResults: HotelChannelResult[] = (Object.entries(input.channels) as Array<
-    [HotelSalesChannelId, HotelCaseInput["channels"][HotelSalesChannelId]]
-  >).map(([channel, config]) => {
-    const occupiedChannelRoomNights = occupiedRoomNights * (config.share / 100);
-    const grossRevenue = grossRoomRevenue * (config.share / 100);
-    const commissionCost = grossRevenue * (config.commission / 100);
-    const netRevenue = grossRevenue - commissionCost;
+  const channelResults: HotelChannelResult[] = CHANNEL_ORDER.map((channel) => {
+    const config = input.channels[channel];
+    const roomTypeRows = channelRoomTypeResults.filter((item) => item.channel === channel);
+    const availableChannelRoomNights = roomTypeRows.reduce((sum, item) => sum + item.availableRoomNights, 0);
+    const occupiedChannelRoomNights = roomTypeRows.reduce((sum, item) => sum + item.occupiedRoomNights, 0);
+    const grossRevenue = roomTypeRows.reduce((sum, item) => sum + item.grossRevenue, 0);
+    const commissionCost = roomTypeRows.reduce((sum, item) => sum + item.commissionCost, 0);
+    const netRevenue = roomTypeRows.reduce((sum, item) => sum + item.netRevenue, 0);
     const netAdr = occupiedChannelRoomNights > 0 ? netRevenue / occupiedChannelRoomNights : 0;
+    const assignedRooms = roomTypeRows.reduce((sum, item) => sum + item.assignedRooms, 0);
 
     return {
       channel,
-      share: config.share,
+      share: roundMetric(occupiedRoomNights > 0 ? (occupiedChannelRoomNights / occupiedRoomNights) * 100 : 0),
       commission: config.commission,
+      assignedRooms,
+      availableRoomNights: roundMetric(availableChannelRoomNights),
       occupiedRoomNights: roundMetric(occupiedChannelRoomNights),
+      occupancyRate: roundMetric(availableChannelRoomNights > 0 ? (occupiedChannelRoomNights / availableChannelRoomNights) * 100 : 0),
       grossRevenue: roundCurrency(grossRevenue),
       commissionCost: roundCurrency(commissionCost),
       netRevenue: roundCurrency(netRevenue),
@@ -100,7 +146,8 @@ function buildMonthlyForecast(
     commissionsTotal: roundCurrency(commissionsTotal),
     netRoomRevenue: roundCurrency(grossRoomRevenue - commissionsTotal),
     roomTypeResults,
-    channelResults
+    channelResults,
+    channelRoomTypeResults
   };
 }
 
@@ -168,6 +215,13 @@ function buildRecommendation(input: HotelRecommendation) {
 function buildWarnings(input: HotelCaseInput, weightedAverageAdr: number, monthlyForecasts: HotelMonthlyForecast[]) {
   const warnings: string[] = [];
   const roomMixTotal = sumRoomMix(input.roomMix);
+  const allocatedRoomMix = ROOM_TYPE_ORDER.reduce<Record<(typeof ROOM_TYPE_ORDER)[number], number>>(
+    (current, type) => ({
+      ...current,
+      [type]: CHANNEL_ORDER.reduce((sum, channel) => sum + input.channels[channel].roomAllocation[type], 0)
+    }),
+    {} as Record<(typeof ROOM_TYPE_ORDER)[number], number>
+  );
   const channelMixTotal =
     input.channels.tourOperators.share +
     input.channels.onlineAgencies.share +
@@ -190,8 +244,29 @@ function buildWarnings(input: HotelCaseInput, weightedAverageAdr: number, monthl
     warnings.push(`El mix de habitaciones suma ${roomMixTotal}, pero el hotel declara ${input.totalRooms}. Antes de decidir, corrige el inventario para no distorsionar room nights e ingresos.`);
   }
 
+  for (const type of ROOM_TYPE_ORDER) {
+    if (allocatedRoomMix[type] !== input.roomMix[type]) {
+      warnings.push(
+        `La asignación por canal en ${ROOM_TYPE_LABELS[type]} suma ${allocatedRoomMix[type]} habitaciones, pero el mix del hotel declara ${input.roomMix[type]}. Corrige la grilla para que la ocupación por canal no quede sesgada.`
+      );
+    }
+  }
+
   if (channelMixTotal !== 100) {
     warnings.push(`La suma de participación de canales es ${roundMetric(channelMixTotal)}%, no 100%. Esto puede inflar o subestimar ingresos por canal y comisiones.`);
+  }
+
+  const channelOverflows = monthlyForecasts.flatMap((month) =>
+    month.channelRoomTypeResults.filter(
+      (item) => item.availableRoomNights > 0 && item.occupiedRoomNights - item.availableRoomNights > 0.5
+    )
+  );
+
+  if (channelOverflows.length > 0) {
+    const overflow = channelOverflows[0];
+    warnings.push(
+      `${CHANNEL_LABELS[overflow.channel]} quedó sobreasignado en ${ROOM_TYPE_LABELS[overflow.type]}: proyecta ${roundMetric(overflow.occupiedRoomNights)} RN sobre una capacidad de ${roundMetric(overflow.availableRoomNights)} RN. Rebalancea cupos o participación del canal.`
+    );
   }
 
   if (weightedAverageAdr < input.targetAverageRate) {
@@ -452,24 +527,36 @@ function buildRecommendations(
 
 export function validateHotelCaseInput(input: HotelCaseInput) {
   const issues: string[] = [];
+  const normalizedInput = normalizeHotelCaseInput(input);
 
-  if (!input.hotelName.trim()) issues.push("Ingresa el nombre del hotel.");
-  if (!input.concept.trim()) issues.push("Describe el concepto del hotel.");
-  if (!input.services.trim()) issues.push("Detalla los servicios del hotel.");
-  if (!input.differentiation.trim()) issues.push("Explica la diferenciacion del hotel.");
-  if (sumRoomMix(input.roomMix) !== input.totalRooms) issues.push("El mix de habitaciones debe coincidir con el total.");
+  if (!normalizedInput.hotelName.trim()) issues.push("Ingresa el nombre del hotel.");
+  if (!normalizedInput.concept.trim()) issues.push("Describe el concepto del hotel.");
+  if (!normalizedInput.services.trim()) issues.push("Detalla los servicios del hotel.");
+  if (!normalizedInput.differentiation.trim()) issues.push("Explica la diferenciacion del hotel.");
+  if (sumRoomMix(normalizedInput.roomMix) !== normalizedInput.totalRooms) issues.push("El mix de habitaciones debe coincidir con el total.");
 
   const channelShare =
-    input.channels.tourOperators.share +
-    input.channels.onlineAgencies.share +
-    input.channels.direct.share +
-    input.channels.corporate.share;
+    normalizedInput.channels.tourOperators.share +
+    normalizedInput.channels.onlineAgencies.share +
+    normalizedInput.channels.direct.share +
+    normalizedInput.channels.corporate.share;
 
   if (channelShare !== 100) issues.push("La distribucion de canales debe sumar 100%.");
 
-  if (input.occupancyJanuary < 1 || input.occupancyJanuary > 100) issues.push("La ocupacion de enero debe estar entre 1% y 100%.");
-  if (input.occupancyFebruary < 1 || input.occupancyFebruary > 100) issues.push("La ocupacion de febrero debe estar entre 1% y 100%.");
-  if (input.targetAverageRate <= 0) issues.push("La meta de ADR debe ser positiva.");
+  for (const type of ROOM_TYPE_ORDER) {
+    const allocationTotal = CHANNEL_ORDER.reduce(
+      (sum, channel) => sum + normalizedInput.channels[channel].roomAllocation[type],
+      0
+    );
+
+    if (allocationTotal !== normalizedInput.roomMix[type]) {
+      issues.push(`La asignacion por canal de ${ROOM_TYPE_LABELS[type]} debe coincidir con el inventario total de esa tipologia.`);
+    }
+  }
+
+  if (normalizedInput.occupancyJanuary < 1 || normalizedInput.occupancyJanuary > 100) issues.push("La ocupacion de enero debe estar entre 1% y 100%.");
+  if (normalizedInput.occupancyFebruary < 1 || normalizedInput.occupancyFebruary > 100) issues.push("La ocupacion de febrero debe estar entre 1% y 100%.");
+  if (normalizedInput.targetAverageRate <= 0) issues.push("La meta de ADR debe ser positiva.");
 
   return issues;
 }
@@ -519,15 +606,29 @@ export function buildHotelForecastSummary(
 }
 
 export function buildHotelCaseBaseResult(input: HotelCaseInput): Omit<HotelCaseResult, "research"> {
+  const normalizedInput = normalizeHotelCaseInput(input);
   const monthlyForecasts = [
-    buildMonthlyForecast(input, "Enero 2027", input.occupancyJanuary, 31),
-    buildMonthlyForecast(input, "Febrero 2027", input.occupancyFebruary, 28)
+    buildMonthlyForecast(normalizedInput, "Enero 2027", normalizedInput.occupancyJanuary, 31),
+    buildMonthlyForecast(normalizedInput, "Febrero 2027", normalizedInput.occupancyFebruary, 28)
   ];
 
   return {
-    input,
+    input: normalizedInput,
     monthlyForecasts,
-    summary: buildHotelForecastSummary(input, monthlyForecasts),
+    summary: buildHotelForecastSummary(normalizedInput, monthlyForecasts),
     generatedAt: new Date().toISOString()
+  };
+}
+
+export function normalizeHotelCaseResult(result: HotelCaseResult | null) {
+  if (!result) return null;
+
+  const normalizedInput = normalizeHotelCaseInput(result.input);
+  const rebuilt = buildHotelCaseBaseResult(normalizedInput);
+
+  return {
+    ...rebuilt,
+    research: result.research,
+    generatedAt: result.generatedAt ?? rebuilt.generatedAt
   };
 }

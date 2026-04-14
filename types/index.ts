@@ -284,6 +284,8 @@ export type HotelRoomRates = {
 export type HotelChannelConfig = {
   share: number;
   commission: number;
+  rates: HotelRoomRates;
+  roomAllocation: HotelRoomMix;
 };
 
 export type HotelChannelMap = Record<HotelSalesChannelId, HotelChannelConfig>;
@@ -440,11 +442,27 @@ export type HotelRoomTypeResult = {
   revenue: number;
 };
 
+export type HotelChannelRoomTypeResult = {
+  channel: HotelSalesChannelId;
+  type: keyof HotelRoomMix;
+  assignedRooms: number;
+  availableRoomNights: number;
+  occupiedRoomNights: number;
+  occupancyRate: number;
+  rate: number;
+  grossRevenue: number;
+  commissionCost: number;
+  netRevenue: number;
+};
+
 export type HotelChannelResult = {
   channel: HotelSalesChannelId;
   share: number;
   commission: number;
+  assignedRooms: number;
+  availableRoomNights: number;
   occupiedRoomNights: number;
+  occupancyRate: number;
   grossRevenue: number;
   commissionCost: number;
   netRevenue: number;
@@ -467,6 +485,7 @@ export type HotelMonthlyForecast = {
   netRoomRevenue: number;
   roomTypeResults: HotelRoomTypeResult[];
   channelResults: HotelChannelResult[];
+  channelRoomTypeResults: HotelChannelRoomTypeResult[];
 };
 
 export type HotelForecastSummary = {

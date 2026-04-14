@@ -18,7 +18,9 @@ const roomRatesSchema = z.object({
 
 const channelSchema = z.object({
   share: z.number(),
-  commission: z.number()
+  commission: z.number(),
+  rates: roomRatesSchema,
+  roomAllocation: roomMixSchema
 });
 
 export const hotelCaseInputSchema: z.ZodType<HotelCaseInput> = z.object({

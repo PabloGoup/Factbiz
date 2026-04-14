@@ -36,8 +36,10 @@ import {
   HOTEL_CHANNEL_LABELS,
   HOTEL_REFERENCE_CATALOG,
   HOTEL_DESTINATION_OPTIONS,
-  HOTEL_DESTINATION_PROFILES
+  HOTEL_DESTINATION_PROFILES,
+  normalizeHotelCaseInput
 } from "@/lib/hotel/data";
+import { normalizeHotelCaseResult } from "@/lib/hotel/forecast";
 import {
   clearStoredHotelResult,
   getStoredHotelBenchmarkFilters,
@@ -92,6 +94,13 @@ function formatPercent(value: number) {
   return `${new Intl.NumberFormat("es-419", {
     maximumFractionDigits: 1
   }).format(value)}%`;
+}
+
+function formatRoomNightCell(value: number) {
+  return new Intl.NumberFormat("es-419", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }).format(value);
 }
 
 function formatDateTime(value: string) {
@@ -224,6 +233,25 @@ function Highlight({
   );
 }
 
+function normalizeRecommendationText(value?: string | null) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.:;,]+$/g, "");
+}
+
+function isGenericRecommendationText(value?: string | null) {
+  const normalized = normalizeRecommendationText(value);
+
+  return (
+    !normalized ||
+    normalized === "la proyección solo se cumple si la palanca se ejecuta sin deteriorar ocupación ni tarifa pública" ||
+    normalized === "definir indicador, responsable y frecuencia de revisión antes de ejecutar" ||
+    normalized === "definir responsable, plazo e indicador de seguimiento antes de implementar"
+  );
+}
+
 function RecommendationDecisionCard({ recommendation, index }: { recommendation: HotelRecommendation; index: number }) {
   const toneClass =
     recommendation.tone === "amber"
@@ -231,6 +259,17 @@ function RecommendationDecisionCard({ recommendation, index }: { recommendation:
       : recommendation.tone === "emerald"
         ? "border-emerald-200 bg-emerald-50/80 dark:border-emerald-900 dark:bg-emerald-950/30"
         : "border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900";
+  const solution = recommendation.solution?.trim();
+  const nextAction = recommendation.nextAction?.trim();
+  const assumption = recommendation.assumption?.trim();
+  const validationMetric = recommendation.validationMetric?.trim();
+  const showSolution = Boolean(solution) && normalizeRecommendationText(solution) !== normalizeRecommendationText(recommendation.text);
+  const showAssumption = Boolean(assumption) && !isGenericRecommendationText(assumption);
+  const showValidation = Boolean(validationMetric) && !isGenericRecommendationText(validationMetric);
+  const showNextAction =
+    Boolean(nextAction) &&
+    normalizeRecommendationText(nextAction) !== normalizeRecommendationText(solution) &&
+    !isGenericRecommendationText(nextAction);
 
   return (
     <div className={`rounded-3xl border p-5 ${toneClass}`}>
@@ -263,14 +302,14 @@ function RecommendationDecisionCard({ recommendation, index }: { recommendation:
             {recommendation.evidence ?? "La recomendación se basa en los resultados del forecast y el mix comercial."}
           </p>
         </div>
-        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-            Solución realizable
-          </p>
-          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-            {recommendation.solution ?? recommendation.nextAction}
-          </p>
-        </div>
+        {showSolution ? (
+          <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+              Solución realizable
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{solution}</p>
+          </div>
+        ) : null}
         <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
             Proyección o mejora posible
@@ -279,30 +318,30 @@ function RecommendationDecisionCard({ recommendation, index }: { recommendation:
             {recommendation.expectedImpact ?? "Impacto esperado: mejorar margen, ADR o control comercial si se ejecuta con seguimiento semanal."}
           </p>
         </div>
-        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-            Condición de cumplimiento
-          </p>
-          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-            {recommendation.assumption ?? "La proyección solo se cumple si la palanca se ejecuta sin deteriorar ocupación ni tarifa pública."}
-          </p>
-        </div>
-        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-            Validación semanal
-          </p>
-          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-            {recommendation.validationMetric ?? "Definir indicador, responsable y frecuencia de revisión antes de ejecutar."}
-          </p>
-        </div>
-        <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70 md:col-span-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-            Próximo paso
-          </p>
-          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-            {recommendation.nextAction ?? "Definir responsable, plazo e indicador de seguimiento antes de implementar."}
-          </p>
-        </div>
+        {showAssumption ? (
+          <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+              Condición de cumplimiento
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{assumption}</p>
+          </div>
+        ) : null}
+        {showValidation ? (
+          <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+              Validación semanal
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{validationMetric}</p>
+          </div>
+        ) : null}
+        {showNextAction ? (
+          <div className="rounded-2xl bg-white/80 p-4 dark:bg-slate-950/70 md:col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+              Próximo paso
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{nextAction}</p>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -653,7 +692,7 @@ export function HotelCaseWorkbench() {
   }, []);
 
   useEffect(() => {
-    const storedCase = getStoredHotelCase(createDefaultHotelCase());
+    const storedCase = normalizeHotelCaseInput(getStoredHotelCase(createDefaultHotelCase()));
     setHotelCase(storedCase);
     setBenchmarkFilters(
       getStoredHotelBenchmarkFilters({
@@ -667,7 +706,7 @@ export function HotelCaseWorkbench() {
     const storedBenchmarkResult = getStoredHotelBenchmarkResult();
     setBenchmarkResult(storedBenchmarkResult);
     setSelectedBenchmarkId(storedBenchmarkResult?.hotels[0]?.id ?? null);
-    setResult(getStoredHotelResult());
+    setResult(normalizeHotelCaseResult(getStoredHotelResult()));
     setHydrated(true);
   }, []);
 
@@ -839,10 +878,12 @@ export function HotelCaseWorkbench() {
       }
 
       const record = payload as SavedHotelCaseRecord;
+      const normalizedInput = normalizeHotelCaseInput(record.caseInput);
+      const normalizedResult = normalizeHotelCaseResult(record.caseResult ?? null);
       setCurrentSavedCaseId(record.id);
-      setHotelCase(record.caseInput);
-      setResult(record.caseResult);
-      setActiveTab(record.caseResult ? "research" : "case");
+      setHotelCase(normalizedInput);
+      setResult(normalizedResult);
+      setActiveTab(normalizedResult ? "research" : "case");
       setSaveMessage(`Se cargó ${record.hotelName} desde la base de datos.`);
     } catch (currentError) {
       setSavedCasesError(currentError instanceof Error ? currentError.message : "No fue posible cargar el caso guardado.");
@@ -869,7 +910,13 @@ export function HotelCaseWorkbench() {
         throw new Error(payloads[failed].error ?? "No fue posible comparar los casos guardados.");
       }
 
-      setCompareRecords(payloads as SavedHotelCaseRecord[]);
+      setCompareRecords(
+        (payloads as SavedHotelCaseRecord[]).map((record) => ({
+          ...record,
+          caseInput: normalizeHotelCaseInput(record.caseInput),
+          caseResult: normalizeHotelCaseResult(record.caseResult ?? null)
+        }))
+      );
     } catch (currentError) {
       setSavedCasesError(currentError instanceof Error ? currentError.message : "No fue posible comparar los casos guardados.");
       setCompareRecords([]);
@@ -913,7 +960,7 @@ export function HotelCaseWorkbench() {
     }));
   };
 
-  const updateChannel = (channel: HotelSalesChannelId, field: "share" | "commission", value: number) => {
+  const updateChannelField = (channel: HotelSalesChannelId, field: "share" | "commission", value: number) => {
     clearCurrentResult();
     setHotelCase((current) => ({
       ...current,
@@ -927,19 +974,62 @@ export function HotelCaseWorkbench() {
     }));
   };
 
-  const applyDestination = (destinationId: HotelCaseInput["destination"]) => {
-    const profile = HOTEL_DESTINATION_PROFILES[destinationId];
-
+  const updateChannelRate = (channel: HotelSalesChannelId, type: (typeof ROOM_TYPE_ORDER)[number], value: number) => {
     clearCurrentResult();
     setHotelCase((current) => ({
       ...current,
-      destination: destinationId,
-      region: profile.region,
-      country: profile.country,
-      roomRates: {
-        ...profile.marketRateReference
+      channels: {
+        ...current.channels,
+        [channel]: {
+          ...current.channels[channel],
+          rates: {
+            ...current.channels[channel].rates,
+            [type]: value
+          }
+        }
       }
     }));
+  };
+
+  const updateChannelAllocation = (channel: HotelSalesChannelId, type: (typeof ROOM_TYPE_ORDER)[number], value: number) => {
+    clearCurrentResult();
+    setHotelCase((current) => ({
+      ...current,
+      channels: {
+        ...current.channels,
+        [channel]: {
+          ...current.channels[channel],
+          roomAllocation: {
+            ...current.channels[channel].roomAllocation,
+            [type]: value
+          }
+        }
+      }
+    }));
+  };
+
+  const applyDestination = (destinationId: HotelCaseInput["destination"]) => {
+    const profile = HOTEL_DESTINATION_PROFILES[destinationId];
+    const nextRates = {
+      ...profile.marketRateReference
+    };
+
+    clearCurrentResult();
+    setHotelCase((current) =>
+      normalizeHotelCaseInput({
+        ...current,
+        destination: destinationId,
+        region: profile.region,
+        country: profile.country,
+        roomRates: nextRates,
+        channels: {
+          tourOperators: { ...current.channels.tourOperators, rates: { ...nextRates } },
+          onlineAgencies: { ...current.channels.onlineAgencies, rates: { ...nextRates } },
+          direct: { ...current.channels.direct, rates: { ...nextRates } },
+          corporate: { ...current.channels.corporate, rates: { ...nextRates } }
+        }
+      })
+    );
 
     setBenchmarkFilters((current) => ({
       ...current,
@@ -969,15 +1059,23 @@ export function HotelCaseWorkbench() {
     });
 
     setHotelCase((current) => ({
-      ...current,
-      destination: reference.destination,
-      region: reference.region,
-      country: reference.country,
-      category: `${reference.stars} estrellas`,
-      roomRates: { ...reference.rates },
-      concept: `${reference.hotelType} inspirado en referencias premium de ${profile.label}, con foco en ${reference.positioning.toLowerCase()}.`,
-      services: combinedServices,
-      differentiation: reference.differentiationIdeas[0] ?? current.differentiation
+      ...normalizeHotelCaseInput({
+        ...current,
+        destination: reference.destination,
+        region: reference.region,
+        country: reference.country,
+        category: `${reference.stars} estrellas`,
+        roomRates: { ...reference.rates },
+        channels: {
+          tourOperators: { ...current.channels.tourOperators, rates: { ...reference.rates } },
+          onlineAgencies: { ...current.channels.onlineAgencies, rates: { ...reference.rates } },
+          direct: { ...current.channels.direct, rates: { ...reference.rates } },
+          corporate: { ...current.channels.corporate, rates: { ...reference.rates } }
+        },
+        concept: `${reference.hotelType} inspirado en referencias premium de ${profile.label}, con foco en ${reference.positioning.toLowerCase()}.`,
+        services: combinedServices,
+        differentiation: reference.differentiationIdeas[0] ?? current.differentiation
+      })
     }));
   };
 
@@ -988,6 +1086,13 @@ export function HotelCaseWorkbench() {
     hotelCase.channels.onlineAgencies.share +
     hotelCase.channels.direct.share +
     hotelCase.channels.corporate.share;
+  const roomAllocationTotals = ROOM_TYPE_ORDER.reduce<Record<(typeof ROOM_TYPE_ORDER)[number], number>>(
+    (current, type) => ({
+      ...current,
+      [type]: CHANNEL_ORDER.reduce((sum, channel) => sum + hotelCase.channels[channel].roomAllocation[type], 0)
+    }),
+    {} as Record<(typeof ROOM_TYPE_ORDER)[number], number>
+  );
 
   const countryOptions = sortOptions(HOTEL_REFERENCE_CATALOG.map((reference) => reference.country));
   const regionOptions = sortOptions(
@@ -2124,47 +2229,156 @@ export function HotelCaseWorkbench() {
             <Card>
               <SectionIntro
                 step="Paso 3"
-                title="Define los canales de venta"
-                description="Aquí decides cuánto venderá el hotel por tour operadores, agencias online, cliente directo y empresas."
+                title="Define canales, tarifarios y cupos"
+                description="Aquí modelas tres cosas a la vez: qué peso tendrá cada canal, qué tarifa venderá por tipología y cuántas habitaciones tendrá asignadas para operar."
               />
               <HelperDetails title="¿Por qué esto importa tanto?" defaultOpen>
-                Dos hoteles pueden vender lo mismo, pero ganar distinto. La diferencia está en cuánto se paga en
-                comisiones y qué canales dejan más dinero neto.
+                Dos hoteles pueden tener la misma ocupación y dejar rentabilidades muy distintas. La diferencia
+                está en la tarifa que se ofrece por canal, la comisión que se paga y el cupo real que se asigna a
+                cada intermediario o canal propio.
               </HelperDetails>
               <div className="mt-5 grid gap-4">
                 {(Object.keys(DEFAULT_HOTEL_CHANNELS) as HotelSalesChannelId[]).map((channel) => (
                   <div
                     key={channel}
-                    className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900 md:grid-cols-[1fr_180px_180px]"
+                    className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900 md:grid-cols-[1fr_160px_160px]"
                   >
                     <div>
                       <p className="font-semibold text-slate-950 dark:text-slate-50">{HOTEL_CHANNEL_LABELS[channel]}</p>
                       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                        Participación esperada de ventas y porcentaje de comisión de este canal.
+                        Define cuánto venderá este canal y cuál será su costo comercial.
                       </p>
                     </div>
                     <FormField label="Participacion %" className="gap-1">
                       <Input
                         type="number"
                         value={hotelCase.channels[channel].share}
-                        onChange={(event) => updateChannel(channel, "share", Number(event.target.value))}
+                        onChange={(event) => updateChannelField(channel, "share", Number(event.target.value))}
                       />
                     </FormField>
                     <FormField label="Comision %" className="gap-1">
                       <Input
                         type="number"
                         value={hotelCase.channels[channel].commission}
-                        onChange={(event) => updateChannel(channel, "commission", Number(event.target.value))}
+                        onChange={(event) => updateChannelField(channel, "commission", Number(event.target.value))}
                       />
                     </FormField>
                   </div>
                 ))}
               </div>
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <SummaryMetric
+                  label="Mix de canal"
+                  value={formatPercent(totalChannelShare)}
+                  helper="La suma de participación de los canales debe quedar en 100%."
+                />
+                <SummaryMetric
+                  label="Asignación Single"
+                  value={`${roomAllocationTotals.single} / ${hotelCase.roomMix.single}`}
+                  helper="Control rápido del cupo asignado para la tipología Single."
+                />
+                <SummaryMetric
+                  label="Asignación Doble"
+                  value={`${roomAllocationTotals.double} / ${hotelCase.roomMix.double}`}
+                  helper="Control rápido del cupo asignado para la tipología Doble."
+                />
+              </div>
               <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                 <div className="mb-3">
-                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Panel simple de canales</p>
+                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Grilla de tarifario por canal</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Esta tabla resume cuánto dependerá el hotel de cada canal y cuánta comisión pagará.
+                    Cada fila representa un canal de venta. Aquí defines el precio con el que ese canal comercializará cada tipología.
+                  </p>
+                </div>
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th className="pb-3">Canal</th>
+                      {ROOM_TYPE_ORDER.map((type) => (
+                        <th key={type} className="pb-3">
+                          {ROOM_TYPE_LABELS[type]}
+                        </th>
+                      ))}
+                      <th className="pb-3">Comisión</th>
+                      <th className="pb-3">Mix</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {CHANNEL_ORDER.map((channel) => (
+                      <tr key={channel} className="border-t border-slate-200 dark:border-slate-800">
+                        <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{HOTEL_CHANNEL_LABELS[channel]}</td>
+                        {ROOM_TYPE_ORDER.map((type) => (
+                          <td key={type} className="py-3 pr-3">
+                            <Input
+                              type="number"
+                              value={hotelCase.channels[channel].rates[type]}
+                              onChange={(event) => updateChannelRate(channel, type, Number(event.target.value))}
+                            />
+                          </td>
+                        ))}
+                        <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(hotelCase.channels[channel].commission)}</td>
+                        <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(hotelCase.channels[channel].share)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Grilla de asignación de habitaciones por canal</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Aquí asignas el inventario operativo por canal. La suma de cada columna debe coincidir con el inventario total por tipología.
+                  </p>
+                </div>
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-slate-500 dark:text-slate-400">
+                    <tr>
+                      <th className="pb-3">Canal</th>
+                      {ROOM_TYPE_ORDER.map((type) => (
+                        <th key={type} className="pb-3">
+                          {ROOM_TYPE_LABELS[type]}
+                        </th>
+                      ))}
+                      <th className="pb-3">Total asignado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {CHANNEL_ORDER.map((channel) => (
+                      <tr key={channel} className="border-t border-slate-200 dark:border-slate-800">
+                        <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{HOTEL_CHANNEL_LABELS[channel]}</td>
+                        {ROOM_TYPE_ORDER.map((type) => (
+                          <td key={type} className="py-3 pr-3">
+                            <Input
+                              type="number"
+                              value={hotelCase.channels[channel].roomAllocation[type]}
+                              onChange={(event) => updateChannelAllocation(channel, type, Number(event.target.value))}
+                            />
+                          </td>
+                        ))}
+                        <td className="py-3 text-slate-600 dark:text-slate-300">
+                          {formatCompactNumber(
+                            ROOM_TYPE_ORDER.reduce((sum, type) => sum + hotelCase.channels[channel].roomAllocation[type], 0)
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-slate-300 font-semibold text-slate-900 dark:border-slate-700 dark:text-slate-50">
+                      <td className="py-3">Control total</td>
+                      {ROOM_TYPE_ORDER.map((type) => (
+                        <td key={type} className="py-3">
+                          {formatCompactNumber(roomAllocationTotals[type])} / {formatCompactNumber(hotelCase.roomMix[type])}
+                        </td>
+                      ))}
+                      <td className="py-3">{formatCompactNumber(totalRoomMix)} / {formatCompactNumber(hotelCase.totalRooms)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Resumen ejecutivo de canales</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Esta tabla condensa peso comercial, comisión y habitaciones asignadas por canal.
                   </p>
                 </div>
                 <table className="min-w-full text-left text-sm">
@@ -2173,7 +2387,8 @@ export function HotelCaseWorkbench() {
                       <th className="pb-3">Canal</th>
                       <th className="pb-3">Participación</th>
                       <th className="pb-3">Comisión</th>
-                      <th className="pb-3">Lectura simple</th>
+                      <th className="pb-3">Habitaciones asignadas</th>
+                      <th className="pb-3">Lectura</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2183,13 +2398,18 @@ export function HotelCaseWorkbench() {
                         <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(hotelCase.channels[channel].share)}</td>
                         <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(hotelCase.channels[channel].commission)}</td>
                         <td className="py-3 text-slate-600 dark:text-slate-300">
+                          {formatCompactNumber(
+                            ROOM_TYPE_ORDER.reduce((sum, type) => sum + hotelCase.channels[channel].roomAllocation[type], 0)
+                          )}
+                        </td>
+                        <td className="py-3 text-slate-600 dark:text-slate-300">
                           {channel === "direct"
-                            ? "Canal clave para defender margen y fidelización."
+                            ? "Canal clave para capturar margen y defender tarifas premium."
                             : channel === "tourOperators"
-                              ? "Aporta volumen, pero puede presionar la tarifa promedio."
+                              ? "Útil para volumen, pero necesita cupos y tarifas controladas."
                               : channel === "onlineAgencies"
-                                ? "Entrega visibilidad, con costo comercial relevante."
-                                : "Ayuda a estabilizar demanda en fechas corporativas o grupos."}
+                                ? "Aporta visibilidad y pickup, con presión comercial más alta."
+                                : "Puede estabilizar fechas corporativas y demanda de hombro."}
                         </td>
                       </tr>
                     ))}
@@ -2633,42 +2853,54 @@ export function HotelCaseWorkbench() {
                   </TableCard>
 
                   <TableCard
-                    title="Fase 2. Distribucion de habitaciones por canal"
-                    description="Luego la app reparte la ocupación del mes entre los cuatro canales de venta. Esta lectura te ayuda a ver cuánta dependencia existe por intermediario."
+                    title="Fase 2. Ocupación por canal y tipología"
+                    description="Esta grilla cruza el cupo asignado a cada canal con las room nights que realmente proyecta vender. Así puedes ver qué canal está tensionado y cuál queda con capacidad ociosa."
                     helperTitle="Qué representa cada número"
                     helperContent={
                       <>
-                        Cada celda muestra room nights estimadas. No es una reserva exacta por día, sino una
-                        distribución presupuestaria del mes para entender el peso de cada canal.
+                        Cada celda muestra habitaciones asignadas, room nights vendidas y ocupación proyectada sobre
+                        el cupo de ese canal. Si una ocupación supera 100%, la asignación comercial quedó corta.
                       </>
                     }
                   >
                     <table className="min-w-full text-left text-sm">
                       <thead className="text-slate-500 dark:text-slate-400">
                         <tr>
-                          <th className="pb-3">Tipo</th>
-                          {CHANNEL_ORDER.map((channel) => (
-                            <th key={channel} className="pb-3">
-                              {HOTEL_CHANNEL_LABELS[channel]}
+                          <th className="pb-3">Canal</th>
+                          {ROOM_TYPE_ORDER.map((type) => (
+                            <th key={type} className="pb-3">
+                              {ROOM_TYPE_LABELS[type]}
                             </th>
                           ))}
-                          <th className="pb-3">Total</th>
+                          <th className="pb-3">RN totales</th>
+                          <th className="pb-3">Ocupación canal</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {ROOM_TYPE_ORDER.map((type) => {
-                          const roomRow = month.roomTypeResults.find((item) => item.type === type);
-                          const soldRoomNights = roomRow?.soldRoomNights ?? 0;
+                        {CHANNEL_ORDER.map((channel) => {
+                          const channelRow = month.channelResults.find((item) => item.channel === channel);
 
                           return (
-                            <tr key={type} className="border-t border-slate-200 dark:border-slate-800">
-                              <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{ROOM_TYPE_LABELS[type]}</td>
-                              {CHANNEL_ORDER.map((channel) => (
-                                <td key={channel} className="py-3 text-slate-600 dark:text-slate-300">
-                                  {(soldRoomNights * (result.input.channels[channel].share / 100)).toFixed(1)}
-                                </td>
-                              ))}
-                              <td className="py-3 text-slate-600 dark:text-slate-300">{soldRoomNights.toFixed(1)}</td>
+                            <tr key={channel} className="border-t border-slate-200 dark:border-slate-800">
+                              <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{HOTEL_CHANNEL_LABELS[channel]}</td>
+                              {ROOM_TYPE_ORDER.map((type) => {
+                                const channelTypeRow = month.channelRoomTypeResults.find(
+                                  (item) => item.channel === channel && item.type === type
+                                );
+
+                                return (
+                                  <td key={type} className="py-3 text-slate-600 dark:text-slate-300">
+                                    <div className="font-medium text-slate-900 dark:text-slate-50">
+                                      {formatCompactNumber(channelTypeRow?.assignedRooms ?? 0)} hab
+                                    </div>
+                                    <div className="text-xs">
+                                      {formatRoomNightCell(channelTypeRow?.occupiedRoomNights ?? 0)} RN · {formatPercent(channelTypeRow?.occupancyRate ?? 0)}
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatRoomNightCell(channelRow?.occupiedRoomNights ?? 0)}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(channelRow?.occupancyRate ?? 0)}</td>
                             </tr>
                           );
                         })}
@@ -2677,42 +2909,52 @@ export function HotelCaseWorkbench() {
                   </TableCard>
 
                   <TableCard
-                    title="Fase 3. Ingreso por habitaciones"
-                    description="Aquí se transforma la ocupación en dinero. La tabla muestra cuánto aporta cada tipo de habitación, distribuido por canal, para que puedas reconocer dónde está el volumen y dónde está el valor."
+                    title="Fase 3. Tarifario e ingreso por canal"
+                    description="Aquí se cruza el tarifario de cada canal con la ocupación vendida. La grilla muestra qué tarifa se aplicó por tipología y cuánto dinero generó cada combinación."
                     helperTitle="Cómo usar esta fase"
                     helperContent={
                       <>
-                        Si el ingreso se concentra demasiado en canales con comisión alta, el hotel puede vender
-                        mucho pero retener poco margen. Esta tabla ayuda a detectar ese desbalance.
+                        La celda junta precio e ingreso. Eso te deja detectar si un canal vende mucho con tarifa baja
+                        o si una tipología premium está quedando mal distribuida entre canales.
                       </>
                     }
                   >
                     <table className="min-w-full text-left text-sm">
                       <thead className="text-slate-500 dark:text-slate-400">
                         <tr>
-                          <th className="pb-3">Tipo</th>
-                          {CHANNEL_ORDER.map((channel) => (
-                            <th key={channel} className="pb-3">
-                              {HOTEL_CHANNEL_LABELS[channel]}
+                          <th className="pb-3">Canal</th>
+                          {ROOM_TYPE_ORDER.map((type) => (
+                            <th key={type} className="pb-3">
+                              {ROOM_TYPE_LABELS[type]}
                             </th>
                           ))}
-                          <th className="pb-3">Total</th>
+                          <th className="pb-3">Gross total</th>
+                          <th className="pb-3">Neto total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {ROOM_TYPE_ORDER.map((type) => {
-                          const roomRow = month.roomTypeResults.find((item) => item.type === type);
-                          const revenue = roomRow?.revenue ?? 0;
+                        {CHANNEL_ORDER.map((channel) => {
+                          const channelRow = month.channelResults.find((item) => item.channel === channel);
 
                           return (
-                            <tr key={type} className="border-t border-slate-200 dark:border-slate-800">
-                              <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{ROOM_TYPE_LABELS[type]}</td>
-                              {CHANNEL_ORDER.map((channel) => (
-                                <td key={channel} className="py-3 text-slate-600 dark:text-slate-300">
-                                  {formatUsd(revenue * (result.input.channels[channel].share / 100))}
-                                </td>
-                              ))}
-                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(revenue)}</td>
+                            <tr key={channel} className="border-t border-slate-200 dark:border-slate-800">
+                              <td className="py-3 font-medium text-slate-900 dark:text-slate-50">{HOTEL_CHANNEL_LABELS[channel]}</td>
+                              {ROOM_TYPE_ORDER.map((type) => {
+                                const channelTypeRow = month.channelRoomTypeResults.find(
+                                  (item) => item.channel === channel && item.type === type
+                                );
+
+                                return (
+                                  <td key={type} className="py-3 text-slate-600 dark:text-slate-300">
+                                    <div className="font-medium text-slate-900 dark:text-slate-50">
+                                      {formatUsd(channelTypeRow?.rate ?? 0)}
+                                    </div>
+                                    <div className="text-xs">{formatUsd(channelTypeRow?.grossRevenue ?? 0)}</div>
+                                  </td>
+                                );
+                              })}
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(channelRow?.grossRevenue ?? 0)}</td>
+                              <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(channelRow?.netRevenue ?? 0)}</td>
                             </tr>
                           );
                         })}
@@ -2722,12 +2964,12 @@ export function HotelCaseWorkbench() {
 
                   <TableCard
                     title="Fase 4. Comisiones y rentabilidad de canales"
-                    description="Esta es la tabla más importante para gerencia comercial. Permite ver qué canal vende, cuánto cuesta vender por ese canal y cuál deja mejor retorno neto."
+                    description="Esta es la tabla de control comercial. Resume cupo asignado, capacidad disponible, room nights vendidas, ingreso bruto, costo de comisión y retorno neto por canal."
                     helperTitle="Regla simple"
                     helperContent={
                       <>
-                        Un canal puede ser fuerte en ocupación y aun así ser poco atractivo si su comisión castiga
-                        demasiado el ingreso neto. Mira siempre gross, comisión y net ADR juntos.
+                        Un canal sano no es solo el que vende más. Mira juntos cupo asignado, ocupación del canal,
+                        gross, comisión y net ADR para decidir dónde conviene crecer y dónde conviene limitar cupos.
                       </>
                     }
                   >
@@ -2736,7 +2978,10 @@ export function HotelCaseWorkbench() {
                         <tr>
                           <th className="pb-3">Canal</th>
                           <th className="pb-3">% mix</th>
-                          <th className="pb-3">RN</th>
+                          <th className="pb-3">Habitaciones asignadas</th>
+                          <th className="pb-3">RN disponibles</th>
+                          <th className="pb-3">RN vendidas</th>
+                          <th className="pb-3">Ocupación</th>
                           <th className="pb-3">Gross</th>
                           <th className="pb-3">Comisión</th>
                           <th className="pb-3">Neto</th>
@@ -2750,7 +2995,10 @@ export function HotelCaseWorkbench() {
                               {HOTEL_CHANNEL_LABELS[item.channel]}
                             </td>
                             <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(item.share)}</td>
-                            <td className="py-3 text-slate-600 dark:text-slate-300">{item.occupiedRoomNights.toFixed(1)}</td>
+                            <td className="py-3 text-slate-600 dark:text-slate-300">{formatCompactNumber(item.assignedRooms)}</td>
+                            <td className="py-3 text-slate-600 dark:text-slate-300">{formatRoomNightCell(item.availableRoomNights)}</td>
+                            <td className="py-3 text-slate-600 dark:text-slate-300">{formatRoomNightCell(item.occupiedRoomNights)}</td>
+                            <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(item.occupancyRate)}</td>
                             <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(item.grossRevenue)}</td>
                             <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(item.commissionCost)}</td>
                             <td className="py-3 text-slate-600 dark:text-slate-300">{formatUsd(item.netRevenue)}</td>

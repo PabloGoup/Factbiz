@@ -21,7 +21,9 @@ const roomRatesSchema = z.object({
 
 const channelSchema = z.object({
   share: z.number().min(0).max(100),
-  commission: z.number().min(0).max(100)
+  commission: z.number().min(0).max(100),
+  rates: roomRatesSchema,
+  roomAllocation: roomMixSchema
 });
 
 const requestSchema = z.object({

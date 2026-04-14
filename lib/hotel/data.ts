@@ -54,6 +54,175 @@ export const DEFAULT_HOTEL_CHANNELS = {
   corporate: { share: 15, commission: 10 }
 } as const;
 
+const HOTEL_CHANNEL_ORDER: HotelSalesChannelId[] = ["tourOperators", "onlineAgencies", "direct", "corporate"];
+const HOTEL_ROOM_TYPE_ORDER = ["single", "double", "triple", "suite"] as const;
+
+function buildChannelRoomAllocation(
+  roomMix: HotelCaseInput["roomMix"],
+  channelShares: Record<HotelSalesChannelId, number>
+): Record<HotelSalesChannelId, HotelCaseInput["roomMix"]> {
+  const allocation = HOTEL_CHANNEL_ORDER.reduce<Record<HotelSalesChannelId, HotelCaseInput["roomMix"]>>(
+    (current, channel) => ({
+      ...current,
+      [channel]: {
+        single: 0,
+        double: 0,
+        triple: 0,
+        suite: 0
+      }
+    }),
+    {} as Record<HotelSalesChannelId, HotelCaseInput["roomMix"]>
+  );
+
+  for (const type of HOTEL_ROOM_TYPE_ORDER) {
+    const totalRooms = roomMix[type];
+    const provisional = HOTEL_CHANNEL_ORDER.map((channel) => {
+      const exact = (totalRooms * Math.max(channelShares[channel], 0)) / 100;
+      const base = Math.floor(exact);
+
+      allocation[channel][type] = base;
+
+      return {
+        channel,
+        remainder: exact - base
+      };
+    });
+
+    let remaining = totalRooms - provisional.reduce((sum, item) => sum + allocation[item.channel][type], 0);
+
+    provisional
+      .sort((left, right) => right.remainder - left.remainder)
+      .slice(0, Math.max(remaining, 0))
+      .forEach(({ channel }) => {
+        allocation[channel][type] += 1;
+        remaining -= 1;
+      });
+
+    if (remaining > 0) {
+      allocation.direct[type] += remaining;
+    }
+  }
+
+  return allocation;
+}
+
+export function normalizeHotelCaseInput(input?: Partial<HotelCaseInput> | null): HotelCaseInput {
+  const fallback = createDefaultHotelCase();
+
+  if (!input) {
+    return fallback;
+  }
+
+  const roomMix = {
+    single: input.roomMix?.single ?? fallback.roomMix.single,
+    double: input.roomMix?.double ?? fallback.roomMix.double,
+    triple: input.roomMix?.triple ?? fallback.roomMix.triple,
+    suite: input.roomMix?.suite ?? fallback.roomMix.suite
+  };
+
+  const roomRates = {
+    single: input.roomRates?.single ?? fallback.roomRates.single,
+    double: input.roomRates?.double ?? fallback.roomRates.double,
+    triple: input.roomRates?.triple ?? fallback.roomRates.triple,
+    suite: input.roomRates?.suite ?? fallback.roomRates.suite
+  };
+
+  const channelShares: Record<HotelSalesChannelId, number> = {
+    tourOperators: input.channels?.tourOperators?.share ?? fallback.channels.tourOperators.share,
+    onlineAgencies: input.channels?.onlineAgencies?.share ?? fallback.channels.onlineAgencies.share,
+    direct: input.channels?.direct?.share ?? fallback.channels.direct.share,
+    corporate: input.channels?.corporate?.share ?? fallback.channels.corporate.share
+  };
+  const defaultAllocation = buildChannelRoomAllocation(roomMix, channelShares);
+
+  return {
+    hotelName: input.hotelName ?? fallback.hotelName,
+    destination: input.destination ?? fallback.destination,
+    region: input.region ?? fallback.region,
+    country: input.country ?? fallback.country,
+    category: input.category ?? fallback.category,
+    concept: input.concept ?? fallback.concept,
+    services: input.services ?? fallback.services,
+    differentiation: input.differentiation ?? fallback.differentiation,
+    totalRooms: input.totalRooms ?? fallback.totalRooms,
+    roomMix,
+    roomRates,
+    previousAverageRate: input.previousAverageRate ?? fallback.previousAverageRate,
+    targetAverageRate: input.targetAverageRate ?? fallback.targetAverageRate,
+    guestFactor: input.guestFactor ?? fallback.guestFactor,
+    breakfastPriceCurrent: input.breakfastPriceCurrent ?? fallback.breakfastPriceCurrent,
+    breakfastPriceProposed: input.breakfastPriceProposed ?? fallback.breakfastPriceProposed,
+    occupancyJanuary: input.occupancyJanuary ?? fallback.occupancyJanuary,
+    occupancyFebruary: input.occupancyFebruary ?? fallback.occupancyFebruary,
+    channels: {
+      tourOperators: {
+        share: channelShares.tourOperators,
+        commission: input.channels?.tourOperators?.commission ?? fallback.channels.tourOperators.commission,
+        rates: {
+          single: input.channels?.tourOperators?.rates?.single ?? roomRates.single,
+          double: input.channels?.tourOperators?.rates?.double ?? roomRates.double,
+          triple: input.channels?.tourOperators?.rates?.triple ?? roomRates.triple,
+          suite: input.channels?.tourOperators?.rates?.suite ?? roomRates.suite
+        },
+        roomAllocation: {
+          single: input.channels?.tourOperators?.roomAllocation?.single ?? defaultAllocation.tourOperators.single,
+          double: input.channels?.tourOperators?.roomAllocation?.double ?? defaultAllocation.tourOperators.double,
+          triple: input.channels?.tourOperators?.roomAllocation?.triple ?? defaultAllocation.tourOperators.triple,
+          suite: input.channels?.tourOperators?.roomAllocation?.suite ?? defaultAllocation.tourOperators.suite
+        }
+      },
+      onlineAgencies: {
+        share: channelShares.onlineAgencies,
+        commission: input.channels?.onlineAgencies?.commission ?? fallback.channels.onlineAgencies.commission,
+        rates: {
+          single: input.channels?.onlineAgencies?.rates?.single ?? roomRates.single,
+          double: input.channels?.onlineAgencies?.rates?.double ?? roomRates.double,
+          triple: input.channels?.onlineAgencies?.rates?.triple ?? roomRates.triple,
+          suite: input.channels?.onlineAgencies?.rates?.suite ?? roomRates.suite
+        },
+        roomAllocation: {
+          single: input.channels?.onlineAgencies?.roomAllocation?.single ?? defaultAllocation.onlineAgencies.single,
+          double: input.channels?.onlineAgencies?.roomAllocation?.double ?? defaultAllocation.onlineAgencies.double,
+          triple: input.channels?.onlineAgencies?.roomAllocation?.triple ?? defaultAllocation.onlineAgencies.triple,
+          suite: input.channels?.onlineAgencies?.roomAllocation?.suite ?? defaultAllocation.onlineAgencies.suite
+        }
+      },
+      direct: {
+        share: channelShares.direct,
+        commission: input.channels?.direct?.commission ?? fallback.channels.direct.commission,
+        rates: {
+          single: input.channels?.direct?.rates?.single ?? roomRates.single,
+          double: input.channels?.direct?.rates?.double ?? roomRates.double,
+          triple: input.channels?.direct?.rates?.triple ?? roomRates.triple,
+          suite: input.channels?.direct?.rates?.suite ?? roomRates.suite
+        },
+        roomAllocation: {
+          single: input.channels?.direct?.roomAllocation?.single ?? defaultAllocation.direct.single,
+          double: input.channels?.direct?.roomAllocation?.double ?? defaultAllocation.direct.double,
+          triple: input.channels?.direct?.roomAllocation?.triple ?? defaultAllocation.direct.triple,
+          suite: input.channels?.direct?.roomAllocation?.suite ?? defaultAllocation.direct.suite
+        }
+      },
+      corporate: {
+        share: channelShares.corporate,
+        commission: input.channels?.corporate?.commission ?? fallback.channels.corporate.commission,
+        rates: {
+          single: input.channels?.corporate?.rates?.single ?? roomRates.single,
+          double: input.channels?.corporate?.rates?.double ?? roomRates.double,
+          triple: input.channels?.corporate?.rates?.triple ?? roomRates.triple,
+          suite: input.channels?.corporate?.rates?.suite ?? roomRates.suite
+        },
+        roomAllocation: {
+          single: input.channels?.corporate?.roomAllocation?.single ?? defaultAllocation.corporate.single,
+          double: input.channels?.corporate?.roomAllocation?.double ?? defaultAllocation.corporate.double,
+          triple: input.channels?.corporate?.roomAllocation?.triple ?? defaultAllocation.corporate.triple,
+          suite: input.channels?.corporate?.roomAllocation?.suite ?? defaultAllocation.corporate.suite
+        }
+      }
+    }
+  };
+}
+
 const CHILE_RECEPTIVE_TOURISM_SOURCE: ResearchSource = {
   title: "Subsecretaría de Turismo - Llegadas de turistas extranjeros al país",
   url: "https://www.subturismo.gob.cl/2026/02/26/chile-supera-los-6-millones-de-turistas-extranjeros-en-2025-la-mejor-cifra-desde-2017-y-el-mayor-registro-post-pandemia/",
@@ -1114,6 +1283,21 @@ export function buildFallbackBenchmarkReport(input: HotelBenchmarkSearchInput): 
 
 export function createDefaultHotelCase(): HotelCaseInput {
   const destination = HOTEL_DESTINATION_PROFILES["san-pedro-de-atacama"];
+  const roomMix = {
+    single: 40,
+    double: 96,
+    triple: 34,
+    suite: 20
+  };
+  const roomRates = {
+    ...destination.marketRateReference
+  };
+  const defaultAllocation = buildChannelRoomAllocation(roomMix, {
+    tourOperators: DEFAULT_HOTEL_CHANNELS.tourOperators.share,
+    onlineAgencies: DEFAULT_HOTEL_CHANNELS.onlineAgencies.share,
+    direct: DEFAULT_HOTEL_CHANNELS.direct.share,
+    corporate: DEFAULT_HOTEL_CHANNELS.corporate.share
+  });
 
   return {
     hotelName: "Altos del Desierto Grand Hotel",
@@ -1128,15 +1312,8 @@ export function createDefaultHotelCase(): HotelCaseInput {
     differentiation:
       "Se diferencia por combinar lujo, astronomia, excursionismo curado y una estrategia comercial menos dependiente de tour operadores, con mayor enfasis en canal directo y corporate selectivo.",
     totalRooms: 190,
-    roomMix: {
-      single: 40,
-      double: 96,
-      triple: 34,
-      suite: 20
-    },
-    roomRates: {
-      ...destination.marketRateReference
-    },
+    roomMix,
+    roomRates,
     previousAverageRate: 195,
     targetAverageRate: 210,
     guestFactor: 2,
@@ -1145,10 +1322,26 @@ export function createDefaultHotelCase(): HotelCaseInput {
     occupancyJanuary: 94,
     occupancyFebruary: 88,
     channels: {
-      tourOperators: { ...DEFAULT_HOTEL_CHANNELS.tourOperators },
-      onlineAgencies: { ...DEFAULT_HOTEL_CHANNELS.onlineAgencies },
-      direct: { ...DEFAULT_HOTEL_CHANNELS.direct },
-      corporate: { ...DEFAULT_HOTEL_CHANNELS.corporate }
+      tourOperators: {
+        ...DEFAULT_HOTEL_CHANNELS.tourOperators,
+        rates: { ...roomRates },
+        roomAllocation: { ...defaultAllocation.tourOperators }
+      },
+      onlineAgencies: {
+        ...DEFAULT_HOTEL_CHANNELS.onlineAgencies,
+        rates: { ...roomRates },
+        roomAllocation: { ...defaultAllocation.onlineAgencies }
+      },
+      direct: {
+        ...DEFAULT_HOTEL_CHANNELS.direct,
+        rates: { ...roomRates },
+        roomAllocation: { ...defaultAllocation.direct }
+      },
+      corporate: {
+        ...DEFAULT_HOTEL_CHANNELS.corporate,
+        rates: { ...roomRates },
+        roomAllocation: { ...defaultAllocation.corporate }
+      }
     }
   };
 }
