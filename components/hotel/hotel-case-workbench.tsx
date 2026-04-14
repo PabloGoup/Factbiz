@@ -51,7 +51,7 @@ import {
   setStoredHotelCase,
   setStoredHotelResult
 } from "@/lib/storage";
-import { printCurrentPage } from "@/lib/report/export";
+import { downloadHotelExcel, printCurrentPage } from "@/lib/report/export";
 import type {
   HotelBenchmarkReport,
   HotelBenchmarkSearchInput,
@@ -1273,6 +1273,12 @@ export function HotelCaseWorkbench() {
             <Button variant="secondary" onClick={() => printCurrentPage(result.input.hotelName)}>
               <Download className="mr-2 h-4 w-4" />
               Descargar PDF completo
+            </Button>
+          ) : null}
+          {result ? (
+            <Button variant="secondary" onClick={() => void downloadHotelExcel(result)}>
+              <Download className="mr-2 h-4 w-4" />
+              Exportar Excel de canales
             </Button>
           ) : null}
           {result ? (
