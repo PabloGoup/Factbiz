@@ -59,7 +59,8 @@ const HOTEL_ROOM_TYPE_ORDER = ["single", "double", "triple", "suite"] as const;
 
 export function buildChannelRoomAllocation(
   roomMix: HotelCaseInput["roomMix"],
-  channelShares: Record<HotelSalesChannelId, number>
+  channelShares: Record<HotelSalesChannelId, number>,
+  peakOccupancyRate = 1
 ): Record<HotelSalesChannelId, HotelCaseInput["roomMix"]> {
   const allocation = HOTEL_CHANNEL_ORDER.reduce<Record<HotelSalesChannelId, HotelCaseInput["roomMix"]>>(
     (current, channel) => ({
@@ -77,26 +78,31 @@ export function buildChannelRoomAllocation(
   for (const type of HOTEL_ROOM_TYPE_ORDER) {
     const totalRooms = roomMix[type];
     const provisional = HOTEL_CHANNEL_ORDER.map((channel) => {
-      const exact = (totalRooms * Math.max(channelShares[channel], 0)) / 100;
-      const base = Math.floor(exact);
+      const demandRooms = (totalRooms * Math.max(Math.min(peakOccupancyRate, 1), 0) * Math.max(channelShares[channel], 0)) / 100;
+      const base = Math.floor(demandRooms);
 
       allocation[channel][type] = base;
 
       return {
         channel,
-        remainder: exact - base
+        demandRooms
       };
     });
 
     let remaining = totalRooms - provisional.reduce((sum, item) => sum + allocation[item.channel][type], 0);
 
-    provisional
-      .sort((left, right) => right.remainder - left.remainder)
-      .slice(0, Math.max(remaining, 0))
-      .forEach(({ channel }) => {
-        allocation[channel][type] += 1;
-        remaining -= 1;
-      });
+    while (remaining > 0) {
+      const nextTarget = provisional
+        .map((item) => ({
+          channel: item.channel,
+          shortage: item.demandRooms - allocation[item.channel][type],
+          share: channelShares[item.channel]
+        }))
+        .sort((left, right) => right.shortage - left.shortage || right.share - left.share)[0];
+
+      allocation[nextTarget.channel][type] += 1;
+      remaining -= 1;
+    }
 
     if (remaining > 0) {
       allocation.direct[type] += remaining;
@@ -133,7 +139,11 @@ export function normalizeHotelCaseInput(input?: Partial<HotelCaseInput> | null):
     direct: input.channels?.direct?.share ?? fallback.channels.direct.share,
     corporate: input.channels?.corporate?.share ?? fallback.channels.corporate.share
   };
-  const defaultAllocation = buildChannelRoomAllocation(roomMix, channelShares);
+  const peakOccupancyRate = Math.max(
+    (input.occupancyJanuary ?? fallback.occupancyJanuary) / 100,
+    (input.occupancyFebruary ?? fallback.occupancyFebruary) / 100
+  );
+  const defaultAllocation = buildChannelRoomAllocation(roomMix, channelShares, peakOccupancyRate);
 
   return {
     hotelName: input.hotelName ?? fallback.hotelName,
@@ -1297,7 +1307,7 @@ export function createDefaultHotelCase(): HotelCaseInput {
     onlineAgencies: DEFAULT_HOTEL_CHANNELS.onlineAgencies.share,
     direct: DEFAULT_HOTEL_CHANNELS.direct.share,
     corporate: DEFAULT_HOTEL_CHANNELS.corporate.share
-  });
+  }, Math.max(94 / 100, 88 / 100));
 
   return {
     hotelName: "Altos del Desierto Grand Hotel",

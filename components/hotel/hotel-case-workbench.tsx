@@ -97,6 +97,99 @@ function formatPercent(value: number) {
   }).format(value)}%`;
 }
 
+function buildAutomaticChannelAllocation(current: HotelCaseInput): HotelCaseInput {
+  const nextAllocation = buildChannelRoomAllocation(
+    current.roomMix,
+    {
+      tourOperators: current.channels.tourOperators.share,
+      onlineAgencies: current.channels.onlineAgencies.share,
+      direct: current.channels.direct.share,
+      corporate: current.channels.corporate.share
+    },
+    Math.max(current.occupancyJanuary / 100, current.occupancyFebruary / 100)
+  );
+
+  return {
+    ...current,
+    channels: {
+      tourOperators: {
+        ...current.channels.tourOperators,
+        roomAllocation: { ...nextAllocation.tourOperators }
+      },
+      onlineAgencies: {
+        ...current.channels.onlineAgencies,
+        roomAllocation: { ...nextAllocation.onlineAgencies }
+      },
+      direct: {
+        ...current.channels.direct,
+        roomAllocation: { ...nextAllocation.direct }
+      },
+      corporate: {
+        ...current.channels.corporate,
+        roomAllocation: { ...nextAllocation.corporate }
+      }
+    }
+  };
+}
+
+function redistributeRoomTypeAllocation(
+  channels: HotelCaseInput["channels"],
+  roomMix: HotelCaseInput["roomMix"],
+  targetChannel: HotelSalesChannelId,
+  roomType: (typeof ROOM_TYPE_ORDER)[number],
+  desiredValue: number
+) {
+  const totalRoomsForType = Math.max(roomMix[roomType], 0);
+  const clampedValue = Math.min(Math.max(Math.round(desiredValue), 0), totalRoomsForType);
+  const remainingChannels = CHANNEL_ORDER.filter((channel) => channel !== targetChannel);
+  const remainingRooms = Math.max(totalRoomsForType - clampedValue, 0);
+  const totalShareWeight = remainingChannels.reduce((sum, channel) => sum + Math.max(channels[channel].share, 0), 0);
+
+  const distributed = remainingChannels.map((channel) => {
+    const weight = totalShareWeight > 0 ? Math.max(channels[channel].share, 0) / totalShareWeight : 1 / remainingChannels.length;
+    const exact = remainingRooms * weight;
+
+    return {
+      channel,
+      base: Math.floor(exact),
+      remainder: exact - Math.floor(exact)
+    };
+  });
+
+  let leftover = remainingRooms - distributed.reduce((sum, item) => sum + item.base, 0);
+
+  distributed
+    .sort((left, right) => right.remainder - left.remainder)
+    .forEach((item) => {
+      if (leftover <= 0) return;
+      item.base += 1;
+      leftover -= 1;
+    });
+
+  return {
+    ...channels,
+    [targetChannel]: {
+      ...channels[targetChannel],
+      roomAllocation: {
+        ...channels[targetChannel].roomAllocation,
+        [roomType]: clampedValue
+      }
+    },
+    ...Object.fromEntries(
+      distributed.map((item) => [
+        item.channel,
+        {
+          ...channels[item.channel],
+          roomAllocation: {
+            ...channels[item.channel].roomAllocation,
+            [roomType]: item.base
+          }
+        }
+      ])
+    )
+  } as HotelCaseInput["channels"];
+}
+
 function formatRoomNightCell(value: number) {
   return new Intl.NumberFormat("es-419", {
     minimumFractionDigits: 1,
@@ -941,13 +1034,16 @@ export function HotelCaseWorkbench() {
 
   const updateRoomMix = (key: keyof HotelCaseInput["roomMix"], value: number) => {
     clearCurrentResult();
-    setHotelCase((current) => ({
-      ...current,
-      roomMix: {
+    setHotelCase((current) => {
+      const nextRoomMix = {
         ...current.roomMix,
         [key]: value
-      }
-    }));
+      };
+      return buildAutomaticChannelAllocation({
+        ...current,
+        roomMix: nextRoomMix
+      });
+    });
   };
 
   const updateRoomRate = (key: keyof HotelCaseInput["roomRates"], value: number) => {
@@ -973,34 +1069,10 @@ export function HotelCaseWorkbench() {
       };
 
       if (field === "share") {
-        const nextAllocation = buildChannelRoomAllocation(current.roomMix, {
-          tourOperators: nextChannels.tourOperators.share,
-          onlineAgencies: nextChannels.onlineAgencies.share,
-          direct: nextChannels.direct.share,
-          corporate: nextChannels.corporate.share
-        });
-
-        return {
+        return buildAutomaticChannelAllocation({
           ...current,
-          channels: {
-            tourOperators: {
-              ...nextChannels.tourOperators,
-              roomAllocation: { ...nextAllocation.tourOperators }
-            },
-            onlineAgencies: {
-              ...nextChannels.onlineAgencies,
-              roomAllocation: { ...nextAllocation.onlineAgencies }
-            },
-            direct: {
-              ...nextChannels.direct,
-              roomAllocation: { ...nextAllocation.direct }
-            },
-            corporate: {
-              ...nextChannels.corporate,
-              roomAllocation: { ...nextAllocation.corporate }
-            }
-          }
-        };
+          channels: nextChannels
+        });
       }
 
       return {
@@ -1031,17 +1103,13 @@ export function HotelCaseWorkbench() {
     clearCurrentResult();
     setHotelCase((current) => ({
       ...current,
-      channels: {
-        ...current.channels,
-        [channel]: {
-          ...current.channels[channel],
-          roomAllocation: {
-            ...current.channels[channel].roomAllocation,
-            [type]: value
-          }
-        }
-      }
+      channels: redistributeRoomTypeAllocation(current.channels, current.roomMix, channel, type, value)
     }));
+  };
+
+  const reorganizeChannelAllocations = () => {
+    clearCurrentResult();
+    setHotelCase((current) => buildAutomaticChannelAllocation(current));
   };
 
   const applyDestination = (destinationId: HotelCaseInput["destination"]) => {
@@ -1134,7 +1202,7 @@ export function HotelCaseWorkbench() {
     onlineAgencies: hotelCase.channels.onlineAgencies.share,
     direct: hotelCase.channels.direct.share,
     corporate: hotelCase.channels.corporate.share
-  });
+  }, Math.max(hotelCase.occupancyJanuary / 100, hotelCase.occupancyFebruary / 100));
   const channelAllocationStatus = CHANNEL_ORDER.map((channel) => {
     const assigned = ROOM_TYPE_ORDER.reduce((sum, type) => sum + hotelCase.channels[channel].roomAllocation[type], 0);
     const expected = ROOM_TYPE_ORDER.reduce((sum, type) => sum + expectedChannelAllocation[channel][type], 0);
@@ -1146,7 +1214,6 @@ export function HotelCaseWorkbench() {
       isAligned: assigned === expected
     };
   });
-  const allocationMatchesShare = channelAllocationStatus.every((item) => item.isAligned);
 
   const countryOptions = sortOptions(HOTEL_REFERENCE_CATALOG.map((reference) => reference.country));
   const regionOptions = sortOptions(
@@ -2343,16 +2410,14 @@ export function HotelCaseWorkbench() {
                   helper="Control rápido del cupo asignado para la tipología Doble."
                 />
                 <SummaryMetric
-                  label="Cupo vs participación"
-                  value={allocationMatchesShare ? "Cuadra" : "No cuadra"}
-                  helper="Cada canal debería tener un total de habitaciones alineado con su porcentaje de participación."
+                  label="Asignación asistida"
+                  value="Activa"
+                  helper="Cuando editas una celda, la app redistribuye automáticamente el resto de esa tipología para no descuadrar el inventario."
                 />
               </div>
-              {!allocationMatchesShare ? (
-                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                  La asignación manual de habitaciones ya no coincide con la participación de canales. Si defines 20% para un canal, su cupo total debería acercarse al objetivo calculado para ese porcentaje.
-                </div>
-              ) : null}
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                La participación define la propuesta base de cupos por canal. Si modificas una celda manualmente, la app redistribuye automáticamente el resto de esa tipología entre los otros canales para mantener el total sin descuadre.
+              </div>
               <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                 <div className="mb-3">
                   <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Grilla de tarifario por canal</p>
@@ -2389,16 +2454,28 @@ export function HotelCaseWorkbench() {
                         <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(hotelCase.channels[channel].commission)}</td>
                         <td className="py-3 text-slate-600 dark:text-slate-300">{formatPercent(hotelCase.channels[channel].share)}</td>
                       </tr>
-                    ))}
+                ))}
                   </tbody>
                 </table>
               </div>
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                La participación define la propuesta base de cupos por canal. Si modificas una celda manualmente, la app redistribuye automáticamente el resto de esa tipología entre los otros canales para mantener el total sin descuadre. Si cambias la ocupación y quieres recalcular toda la grilla con ese nuevo escenario, usa el botón <span className="font-semibold text-slate-900 dark:text-slate-50">Re organizar</span>.
+              </div>
               <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                <div className="mb-3">
-                  <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Grilla de asignación de habitaciones por canal</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Aquí asignas el inventario operativo por canal. Cada celda muestra el número de habitaciones y abajo el porcentaje que representa dentro de esa tipología.
-                  </p>
+                <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950 dark:text-slate-50">Grilla de asignación de habitaciones por canal</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Aquí asignas el inventario operativo por canal. Cada celda muestra el número de habitaciones y abajo el porcentaje que representa dentro de esa tipología.
+                    </p>
+                  </div>
+                  <Button type="button" variant="secondary" className="gap-2 self-start" onClick={reorganizeChannelAllocations}>
+                    <RefreshCcw className="h-4 w-4" />
+                    Re organizar
+                  </Button>
+                </div>
+                <div className="mb-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
+                  El botón reorganiza toda la asignación con la ocupación vigente, la participación de cada canal y el mix actual de habitaciones.
                 </div>
                 <table className="min-w-full text-left text-sm">
                   <thead className="text-slate-500 dark:text-slate-400">
@@ -2536,7 +2613,7 @@ export function HotelCaseWorkbench() {
             </Card>
 
               <div className="flex flex-wrap gap-3">
-                <Button onClick={() => void solveHotelCase()} disabled={loading || !allocationMatchesShare}>
+                <Button onClick={() => void solveHotelCase()} disabled={loading}>
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                   Resolver caso hotelero
                 </Button>
@@ -2555,11 +2632,6 @@ export function HotelCaseWorkbench() {
               </div>
 
               {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-              {!allocationMatchesShare ? (
-                <p className="text-sm text-amber-700 dark:text-amber-300">
-                  No puedes resolver el caso hasta que el total asignado por cada canal cuadre con su porcentaje de participación.
-                </p>
-              ) : null}
             </div>
 
             <div className="space-y-6 xl:sticky xl:top-24 self-start">
